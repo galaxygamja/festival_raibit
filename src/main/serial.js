@@ -248,6 +248,7 @@ class SerialManager extends EventEmitter {
     e.info = info;
     e.mode = 'spikerbox';
     e.transport = 'hid';
+    e.parser = new hid.HidDecoder(); // HID 는 emg.py 와 같은 전용 디코더 (시리얼용 SpikerBoxParser 아님)
     e.name = info.product || null;
     e.openedAt = now;
     const failed = (err) => {
@@ -259,6 +260,7 @@ class SerialManager extends EventEmitter {
     try {
       e.hid = this.hid.openDevice(info, {
         onData: (buf) => this.onBytes(e, buf),
+        onBadReport: () => e.parser.badReport(),
         onClose: () => {
           // 프레임을 한 번도 못 받고 닫혔으면 열기 실패로 친다
           if (!e.gotFrames && !e.closed) failed(null);
@@ -429,7 +431,8 @@ class SerialManager extends EventEmitter {
     const want = ((this.getSettings().emg || {}).channel || 1) - 1;
     const idx = want < r.frames[0].length ? want : 0;
     // 두 번째 인자: 장치가 알려 준 샘플레이트 (전원 잡음 필터 설계용)
-    this.emit('emg', r.frames.map((f) => f[idx]), Number(e.msgs.MSF) || 10000);
+    const fallbackRate = e.transport === 'hid' ? hid.defaultRate(e.parser.channels) : 10000;
+    this.emit('emg', r.frames.map((f) => f[idx]), Number(e.msgs.MSF) || fallbackRate);
   }
 
   onHwt(e, hwt) {
