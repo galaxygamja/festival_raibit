@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current status: v2.1.2
+## Current status: v2.1.3
 
 The v1→v2 migration (2-player Arduino contest → 1-player record mode fed by a SpikerBox) is code-complete and documented in `PLAN.md` (Phases 1–4 and checklist steps 1–10 done). **Only step 11, the on-site hardware test, remains**: real SpikerBox/EMG, macOS 222222 baud, calibration default, START Arduino, Windows exe. Update PLAN.md first if that testing changes a decision.
 
@@ -33,7 +33,7 @@ There is no lint step and no way to run a single test. `test/game.test.js` is on
 - Every non-zero result is kept in `records.json` as `{id, name, score, at}`; the hall of fame is derived as the top 5 (score desc, earlier record wins ties), and the result screen shows the overall place (`place`/`total`). 0 points are never recorded. New entries are named `ㅇㅇㅇ`. In the admin screen the operator can view all records ("전체 기록 보기"), edit any name **and score**, delete single records (✕), or "기록 전체 삭제" (backs up as `records.json.bak-<time>`, returns the game to IDLE).
 - **Main screen layout** (accepted by the user; PLAN.md §5.1 describes an earlier idea): two 15-step level gauges on the left and right edges, and between them the banner (state label, 7-segment score, progress or `전체 n위 / N개 기록 중`) stacked above the hall of fame. No P1/P2 panels.
 - Admin screen shortcut is `Ctrl+D` on Windows and `Control+D` on macOS (not Cmd), and F11 toggles fullscreen. Keys are matched by `e.code` so they work with a Korean IME active. A teammate's v1-based commit (`bb10e34`: `run.bat`, auto-launching Geometry Dash, a hidden-corner admin entry instead of Ctrl+D) was deliberately discarded; do not reintroduce those.
-- Bump the `package.json` version on every user-visible change (the user checks for this). The v2 migration ships as `2.0.0`.
+- Bump the `package.json` version on every user-visible change (the user checks for this; the admin screen shows it bottom-right from `app.getVersion()`). The v2 migration ships as `2.0.0`.
 - The user communicates in Korean; keep UI text and replies in Korean.
 
 ## Architecture

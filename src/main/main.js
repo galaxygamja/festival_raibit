@@ -67,6 +67,7 @@ function payload() {
     fullscreen: isFullscreen(),
     saveError: lastSaveError,
     dataDir: store.dir,
+    version: app.getVersion(),
   };
 }
 

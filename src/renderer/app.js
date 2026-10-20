@@ -342,6 +342,7 @@
 
   function renderAdmin() {
     var g = state.game;
+    $('app-version').textContent = state.version ? 'v' + state.version : '';
     syncRecords();
     renderAdminRows(false);
     var lbl = stateLabel(g);
