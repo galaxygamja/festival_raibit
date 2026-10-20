@@ -55,8 +55,8 @@ Electron app, two processes, no bundler. UI is fixed at 1440×900 design pixels 
 
 ## Reference code
 
-- Two remotes: `origin` = https://github.com/dohye0508/Spike-Recorder (this app on its `scoreboard` branch; never push to `master` or other branches there) and `old` = https://github.com/galaxygamja/festival_raibit, whose `main` was fast-forwarded to the current `scoreboard` (2.1.1) so the app can live without the huge Spike Recorder source. Which one is canonical going forward is the user's call; push only where asked.
-- That repo's `master` is a fork of Backyard Brains' Spike Recorder (C++/SDL), with only the README translated relative to upstream. It is a reference for the SpikerBox protocol only: `src/engine/ArduinoSerial.cpp` (frame parser around line 1950, sample rates by device in `setSampleRateAndNumberOfChannelsBasedOnType`, `HWT` names around line 2590, commands around line 2910). Do not vendor or build it.
+- **Canonical repo: `old` = https://github.com/galaxygamja/festival_raibit, branch `main`** (the user made it the main repo again). Work locally on `scoreboard` and push with `git push old scoreboard:main`. `origin` = https://github.com/dohye0508/Spike-Recorder (`scoreboard` branch) is no longer pushed to unless the user asks; never push to its `master`.
+- Spike-Recorder's `master` is a fork of Backyard Brains' Spike Recorder (C++/SDL), with only the README translated relative to upstream. It is a reference for the SpikerBox protocol only: `src/engine/ArduinoSerial.cpp` (frame parser around line 1950, sample rates by device in `setSampleRateAndNumberOfChannelsBasedOnType`, `HWT` names around line 2590, commands around line 2910). Do not vendor or build it.
 - Spike Recorder and this app cannot hold the same serial port at once.
 
 ## Build notes
