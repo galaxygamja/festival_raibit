@@ -4,11 +4,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { DEFAULT_SCORE_TABLE, cleanScoreTable, toScore } = require('./game');
+const { DEFAULT_SCORE_TABLE, cleanScoreTable, toScore, cleanScore, defaultScore, scoreFromLegacyTable } = require('./game');
 
 const DEFAULT_SETTINGS = {
-  // 점수표 [세기, 점수]: 구간마다 직선. 관리자 3페이지에서 고친다 (game.js DEFAULT_SCORE_TABLE 설명 참고)
-  scoreTable: DEFAULT_SCORE_TABLE,
+  // 점수: 기준 힘 + 기준 대비 % 점수표. 관리자 3페이지에서 고친다 (game.js DEFAULT_SCORE 설명 참고)
+  score: defaultScore(),
   askName: true, // START 전에 도전자 이름을 받는다 (이름 없이 Enter 면 ㅇㅇㅇ)
   // SpikerBox 채널(1|2), 휴식 RMS(영점, 거른 신호 기준), 영점 위 여유, 전원 주파수, 노치 사용, 고역 통과 Hz (0 = 끄기)
   emg: { channel: 1, restRms: 0, filtered: true, margin: 1.5, mainsHz: 60, notch: true, highpassHz: 80 },
@@ -88,7 +88,8 @@ function normalizeSettings(raw) {
   // v2.1.6 까지는 거르지 않은 RMS 기준이라 영점이 맞지 않는다 → 지운다
   const old = s.emg && typeof s.emg === 'object' && !emg.filtered;
   return {
-    scoreTable: cleanScoreTable(s.scoreTable) || tableFromCalibration(old ? null : cal, s.scoreCurve),
+    // 2.1.9~ score, 2.1.8 은 [세기, 점수] 표, 2.1.7 은 보정계수·곡선
+    score: cleanScore(s.score) || scoreFromLegacyTable(cleanScoreTable(s.scoreTable) || tableFromCalibration(old ? null : cal, s.scoreCurve)),
     askName: typeof s.askName === 'boolean' ? s.askName : DEFAULT_SETTINGS.askName,
     emg: {
       channel: Number(emg.channel) === 2 ? 2 : 1,

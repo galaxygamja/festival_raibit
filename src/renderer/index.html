@@ -83,7 +83,7 @@
               <button type="button" id="btn-zero" style="height: 40px; padding: 0 14px; border-radius: 10px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 20px; cursor: pointer; white-space: nowrap">영점 잡기</button>
               <div id="rest-text" style="font-size: 17px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"></div>
             </div>
-            <button type="button" id="btn-open-settings" style="height: 40px; padding: 0 12px; border-radius: 10px; border: 2px solid #FFB21E; background: transparent; color: #FFB21E; font-family: inherit; font-size: 18px; cursor: pointer; white-space: nowrap">점수표·신호 ›</button>
+            <button type="button" id="btn-open-settings" style="height: 40px; padding: 0 12px; border-radius: 10px; border: 2px solid #FFB21E; background: transparent; color: #FFB21E; font-family: inherit; font-size: 18px; cursor: pointer; white-space: nowrap">자동 보정·점수 ›</button>
           </div>
         </div>
 
@@ -183,43 +183,81 @@
     <div id="settings-version" style="position: absolute; right: 56px; bottom: 12px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
     <div style="display: flex; align-items: center; gap: 16px">
       <h1 style="margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); white-space: nowrap">관리자 모드 · 설정</h1>
-      <div style="flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">다른 노트북에서도 여기서 다 맞출 수 있습니다</div>
-      <button type="button" id="btn-p3-page1" style="height: 52px; padding: 0 20px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer; white-space: nowrap">‹ 1페이지</button>
-      <button type="button" id="btn-p3-page2" style="height: 52px; padding: 0 20px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer; white-space: nowrap">2페이지 · 진단</button>
-      <button type="button" id="btn-close3" style="height: 52px; padding: 0 20px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer; white-space: nowrap">스코어보드로 돌아가기</button>
+      <div style="flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">새 노트북에서는 오른쪽 위 "자동 보정"부터</div>
+      <button type="button" id="btn-p3-page1" class="btn nav">‹ 1페이지</button>
+      <button type="button" id="btn-p3-page2" class="btn nav">2페이지 · 진단</button>
+      <button type="button" id="btn-close3" class="btn nav">스코어보드로 돌아가기</button>
     </div>
 
     <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 20px">
 
-      <div class="card" style="gap: 10px">
+      <div class="card" style="gap: 12px">
         <div style="display: flex; align-items: baseline; gap: 14px">
-          <h2 style="flex: none">점수표 · 세기 → 점수</h2>
-          <div id="t-live" style="flex: 1; min-width: 0; text-align: right; font-size: 19px; color: #FFB21E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"></div>
+          <h2 style="flex: none">점수 정하기</h2>
+          <div id="t-live" style="flex: 1; min-width: 0; text-align: right; font-size: 21px; color: #FFB21E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"></div>
         </div>
-        <div class="hint">세기 = 거른 RMS − 영점 − 여유. 점과 점 사이는 직선이라, 구간마다 "세기 1 당 점수"가 다릅니다. 마지막 점보다 세면 마지막 점수 그대로입니다.</div>
-        <canvas id="t-graph" width="1640" height="440" style="width: 820px; height: 220px; border-radius: 12px; background: #120807; flex: none"></canvas>
-        <div class="trow" style="font-size: 17px; color: #8E7770"><div></div><div>세기</div><div>점수</div><div>이 구간 세기 1 당</div><div></div></div>
-        <div id="t-rows" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px"></div>
-        <div style="display: flex; gap: 10px; align-items: center">
-          <button type="button" id="btn-t-add" class="btn">+ 점 추가</button>
-          <button type="button" id="btn-t-default" class="btn">기본 점수표로</button>
+
+        <div class="step">
+          <div class="step-n">1</div>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+            <div class="step-t">기준 힘 = 운영자가 <b>최대로</b> 쥔 힘</div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 21px; flex-wrap: nowrap">
+              <span>이 힘이</span>
+              <input type="number" id="sc-top" class="inl" step="100" min="1" max="9999" aria-label="기준 힘 점수" style="width: 110px">
+              <span>점 · 세기</span>
+              <input type="number" id="sc-ref" class="inl" step="0.5" min="0.1" aria-label="기준 힘 세기" style="width: 100px">
+              <div style="flex: 1"></div>
+              <button type="button" id="btn-ref-measure" class="btn amber">최대 힘 재기</button>
+            </div>
+            <div class="hint">센서·노트북이 바뀌면 이것만 다시 재면 같은 곡선이 그대로 맞춰집니다. 아래 표와 그래프는 모두 기준 힘의 % 입니다.</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-n">2</div>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+            <div class="step-t">점수 곡선 <span class="hint" style="font-size: 17px">· 오른쪽일수록 약하게 쥐어도 점수가 잘 나오고, 높은 점수는 올리기 어렵습니다</span></div>
+            <div id="sc-presets" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px"></div>
+          </div>
+        </div>
+
+        <canvas id="t-graph" width="1640" height="480" style="width: 820px; height: 240px; border-radius: 12px; background: #120807; flex: none; cursor: crosshair; touch-action: none"></canvas>
+        <div id="sc-examples" style="display: flex; gap: 8px; flex: none"></div>
+
+        <div style="display: flex; gap: 10px; align-items: center; flex: none">
+          <button type="button" id="btn-t-rows" class="btn">세부 점 고치기 ▾</button>
+          <button type="button" id="btn-t-default" class="btn">기본값으로</button>
           <div id="t-msg" class="hint" style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"></div>
+        </div>
+        <div id="t-rows-box" hidden style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px">
+          <div class="trow" style="font-size: 17px; color: #8E7770"><div></div><div>기준 힘의 %</div><div>점수</div><div>이 구간 1% 당</div><div></div></div>
+          <div id="t-rows" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px"></div>
+          <div><button type="button" id="btn-t-add" class="btn">+ 점 추가</button></div>
         </div>
       </div>
 
       <div style="display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto">
+        <div class="card" style="flex: none; border-color: #FFB21E">
+          <h2>자동 보정</h2>
+          <div class="hint" style="font-size: 17px; color: #B8A29B">이 노트북·이 장소의 잡음을 재서 채널·전원·영점·여유·고역을 고르고, 최대 힘으로 기준 힘도 잡습니다. 결과를 보고 적용할지 정합니다.</div>
+          <div style="display: flex; gap: 10px">
+            <button type="button" id="btn-cal-full" class="btn amber" style="flex: 1; height: 48px; font-size: 22px">자동 보정 (12초)</button>
+            <button type="button" id="btn-cal-noise" class="btn" style="height: 48px" title="쉬는 동안만 재서 전원·영점·여유만 다시 맞춥니다">잡음만 (5초)</button>
+          </div>
+          <div id="cal-last" class="hint"></div>
+        </div>
         <div class="card" style="flex: none">
-          <h2>신호</h2>
+          <h2>신호 <span class="hint" style="font-size: 17px">· 직접 조정 (보통은 자동 보정이 맞춤)</span></h2>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
-            <label class="field"><span>채널</span><select id="s-channel"><option value="1">1</option><option value="2">2</option></select></label>
-            <label class="field" title="전원 잡음이 50 Hz 인 지역이면 50"><span>전원</span><select id="s-mains"><option value="60">60 Hz</option><option value="50">50 Hz</option></select></label>
-            <label class="field" title="쉴 때의 거른 RMS. 영점 잡기로 재거나 직접 입력"><span>영점</span><input type="number" id="s-rest" step="0.1" min="0"></label>
+            <label class="field" title="센서가 꽂힌 SpikerBox 채널"><span>채널</span><select id="s-channel"><option value="1">1</option><option value="2">2</option></select></label>
+            <label class="field" title="한국·미국 60 Hz, 유럽·일본 동부 등 50 Hz"><span>전원</span><select id="s-mains"><option value="60">60 Hz</option><option value="50">50 Hz</option></select></label>
+            <label class="field" title="쉴 때의 거른 RMS. 이만큼 빼고 셉니다"><span>영점</span><input type="number" id="s-rest" step="0.1" min="0"></label>
             <label class="field" title="영점 위로 이만큼 더 빼서 쉴 때 흔들림을 0점으로"><span>여유</span><input type="number" id="s-margin" step="0.1" min="0"></label>
-            <label class="field" title="이 주파수 아래를 거른다. 0 = 끄기"><span>고역 Hz</span><input type="number" id="s-hp" step="5" min="0"></label>
+            <label class="field" title="이 주파수 아래(움직임·전선 흔들림)를 거릅니다. 0 = 끄기. 바꾸면 기준 힘을 다시 재세요"><span>고역 Hz</span><input type="number" id="s-hp" step="5" min="0"></label>
             <label class="field" style="cursor: pointer" title="전원 주파수와 홀수 배수(×1,3,5,7,9)를 잘라낸다"><input type="checkbox" id="s-notch" style="flex: none; width: 20px; height: 20px; accent-color: #FFB21E"><span>전원 잡음 거르기</span></label>
           </div>
           <div style="display: flex; gap: 10px; align-items: center">
-            <button type="button" id="btn-s-zero" class="btn">영점 잡기 (3초)</button>
+            <button type="button" id="btn-s-zero" class="btn">영점만 (3초)</button>
             <div id="s-live" class="hint" style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"></div>
           </div>
         </div>
@@ -233,7 +271,7 @@
         </div>
         <div class="card" style="flex: none">
           <h2>설정 파일</h2>
-          <div class="hint">점수표·신호·이름 받기 설정을 파일로 옮깁니다. 영점과 포트 설정은 노트북마다 다시 잡으세요.</div>
+          <div class="hint">점수·신호·이름 받기 설정을 파일로 옮깁니다. 영점과 포트 설정은 옮기지 않으니, 가져온 뒤 "잡음만" 보정을 하세요.</div>
           <div style="display: flex; gap: 10px">
             <button type="button" id="btn-export" class="btn">내보내기…</button>
             <button type="button" id="btn-import" class="btn">가져오기…</button>
@@ -244,6 +282,26 @@
         <div style="display: flex; align-items: center; gap: 12px; flex: none">
           <div id="s-msg" class="hint" style="flex: 1; min-width: 0"></div>
           <button type="button" id="btn-s-save" style="height: 56px; padding: 0 30px; border-radius: 14px; border: 0; background: #FFB21E; color: #1A0D0B; font-family: inherit; font-size: 26px; cursor: pointer; box-shadow: 0 0 22px rgba(255,178,30,0.45); white-space: nowrap">설정 저장</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="cal-modal" hidden>
+      <div class="cal-box">
+        <div id="cal-title" style="font-size: 30px; color: #FFB21E">자동 보정</div>
+        <div id="cal-steps" style="display: flex; gap: 8px"></div>
+        <div id="cal-big" style="font-size: 64px; text-align: center; line-height: 1.15"></div>
+        <div id="cal-sub" style="font-size: 24px; text-align: center; color: #C9B3AC"></div>
+        <div style="height: 14px; border-radius: 7px; background: #2E1B17; overflow: hidden"><div id="cal-bar" style="height: 100%; width: 0; background: #FFB21E"></div></div>
+        <div id="cal-result" style="display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto"></div>
+        <label id="cal-ref-wrap" style="display: flex; align-items: center; gap: 10px; font-size: 21px; cursor: pointer">
+          <input type="checkbox" id="cal-useref" checked style="width: 22px; height: 22px; accent-color: #FFB21E; margin: 0">
+          <span id="cal-ref-text"></span>
+        </label>
+        <div style="display: flex; gap: 10px; justify-content: flex-end">
+          <button type="button" id="btn-cal-cancel" class="btn" style="height: 50px; font-size: 22px">취소</button>
+          <button type="button" id="btn-cal-retry" class="btn" style="height: 50px; font-size: 22px">다시</button>
+          <button type="button" id="btn-cal-apply" class="btn amber" style="height: 50px; font-size: 22px; padding: 0 28px">적용</button>
         </div>
       </div>
     </div>

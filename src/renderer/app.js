@@ -501,7 +501,7 @@
     $('diag-version').textContent = state.version ? 'v' + state.version : '';
     if (!d) return;
     var sig = d.signal, ser = d.serial, ps = state.ports || {}, sb = ps.spikerbox || {}, st = ps.start || {};
-    var emg = state.emg || {}, set = state.settings || {}, nPts = (set.scoreTable || []).length;
+    var emg = state.emg || {};
     drawScope(sig);
     drawHist(sig);
     renderRec();
@@ -516,7 +516,7 @@
       ['RMS (거르기 전)', fmt(emg.rmsRaw, 1)],
       ['휴식 RMS (영점)', fmt(emg.restRms, 1) + (emg.zeroing ? ' · 재는 중' : '')],
       ['세기 = RMS − 휴식', fmt(emg.strength, 1)],
-      ['점수 (점수표 ' + nPts + '점)', String(score)],
+      ['점수 (기준 힘의 ' + fmt(emg.pct, 0) + '%)', String(score)],
       ['초당 샘플', sig.rate ? sig.rate.toLocaleString() : '-'],
       ['1초 최소 ~ 최대', sig.sec.n ? sig.sec.min + ' ~ ' + sig.sec.max : '-'],
       ['누적 최소 ~ 최대', sig.range.min == null ? '-' : sig.range.min + ' ~ ' + sig.range.max],
@@ -735,125 +735,220 @@
 
   // ───────────────────────── 관리자 3페이지: 설정 ─────────────────────────
   // 입력칸은 페이지를 열 때와 저장한 뒤에만 채운다 (0.05초마다 오는 상태로 덮어쓰지 않게)
-  var tableDraft = [];
+  // 점수 초안 sc: ref = 기준 힘(세기), top = 곡선으로 만들 때 100% 점수, curve = 곡선 지수(직접 고치면 null), points = [[%, 점수]]
+  var sc = { ref: 31, top: 7000, curve: 0.6, points: [] };
+  var rowsOpen = false;
   var lastZeroing = false;
+  var CURVE_PCTS = [0, 2.5, 5, 10, 20, 35, 50, 70, 100, 130, 160, 200, 260, 340];
 
   function settingsMsg(id, text, ok) {
     $(id).textContent = text;
     $(id).style.color = ok === false ? BAD : ok ? GOOD : DIM;
   }
 
-  function fillSettings() {
-    var set = state.settings, e = set.emg || {};
+  function copyPoints(pts) { return (pts || []).map(function (p) { return [p[0], p[1]]; }); }
+
+  // game.js curvePoints 와 같다 (같이 고칠 것)
+  function curvePoints(k, top) {
+    var t = Math.max(1, Math.min(MAX_SCORE, top || 7000));
+    var pmax = 100 * Math.pow(MAX_SCORE / t, 1 / k);
+    var pts = CURVE_PCTS.filter(function (p) { return p < pmax - 0.5; }).map(function (p) { return [p, Math.round(t * Math.pow(p / 100, k))]; });
+    pts.push([Math.round(pmax * 10) / 10, MAX_SCORE]);
+    return pts;
+  }
+
+  // game.js scoreFromTable 과 같다 (같이 고칠 것)
+  function scoreFromTable(x, t) {
+    if (t.length < 2) return 0;
+    var v;
+    if (x <= t[0][0]) v = t[0][0] > 0 ? t[0][1] * x / t[0][0] : t[0][1];
+    else if (x >= t[t.length - 1][0]) v = t[t.length - 1][1];
+    else { var i = 1; while (t[i][0] < x) i++; v = t[i - 1][1] + (t[i][1] - t[i - 1][1]) * (x - t[i - 1][0]) / (t[i][0] - t[i - 1][0]); }
+    return Math.max(0, Math.min(MAX_SCORE, Math.round(v)));
+  }
+
+  function pctOfStrength(st) { return sc.ref > 0 ? Math.max(0, st || 0) / sc.ref * 100 : 0; }
+
+  function fillSignal() {
+    var e = state.settings.emg || {};
     $('s-channel').value = String(e.channel || 1);
     $('s-mains').value = String(e.mainsHz || 60);
     $('s-rest').value = Math.round((e.restRms || 0) * 100) / 100;
     $('s-margin').value = e.margin;
     $('s-hp').value = e.highpassHz;
     $('s-notch').checked = e.notch !== false;
+  }
+
+  function fillSettings() {
+    var set = state.settings, s0 = set.score || state.scoreDefault;
+    fillSignal();
     $('s-askname').checked = !!set.askName;
-    tableDraft = (set.scoreTable || []).map(function (p) { return [String(p[0]), String(p[1])]; });
-    renderTableRows();
+    sc = { ref: s0.ref, top: s0.top, curve: s0.curve, points: copyPoints(s0.points) };
+    $('sc-ref').value = sc.ref;
+    $('sc-top').value = sc.top;
+    renderScoreEditor();
     settingsMsg('s-msg', '', null);
   }
 
-  function draftTable() {
-    var pts = [];
-    tableDraft.forEach(function (r) {
-      var a = parseFloat(r[0]), b = parseFloat(r[1]);
-      if (isFinite(a) && isFinite(b) && a >= 0) pts.push([a, Math.max(0, Math.min(MAX_SCORE, b))]);
-    });
-    pts.sort(function (x, y) { return x[0] - y[0]; });
-    return pts.filter(function (p, i) { return i === 0 || p[0] !== pts[i - 1][0]; });
+  function savedScore() { return state.settings.score || {}; }
+
+  function scoreDirty() {
+    var s0 = savedScore();
+    return s0.ref !== sc.ref || s0.top !== sc.top || s0.curve !== sc.curve || JSON.stringify(s0.points) !== JSON.stringify(sc.points);
   }
 
-  function scoreFromTable(st, t) {
-    if (t.length < 2) return 0;
-    var v;
-    if (st <= t[0][0]) v = t[0][0] > 0 ? t[0][1] * st / t[0][0] : t[0][1];
-    else if (st >= t[t.length - 1][0]) v = t[t.length - 1][1];
-    else { var i = 1; while (t[i][0] < st) i++; v = t[i - 1][1] + (t[i][1] - t[i - 1][1]) * (st - t[i - 1][0]) / (t[i][0] - t[i - 1][0]); }
-    return Math.max(0, Math.min(MAX_SCORE, Math.round(v)));
+  function renderScoreEditor() {
+    renderPresets();
+    renderExamples();
+    if (rowsOpen) renderTableRows();
+    updateScoreMsg();
+  }
+
+  function renderPresets() {
+    var presets = state.curvePresets || [];
+    var html = presets.map(function (p) {
+      var pts = curvePoints(p.curve, sc.top);
+      return '<button type="button" class="btn preset' + (sc.curve === p.curve ? ' on' : '') + '" data-curve="' + p.curve + '">' +
+        esc(p.name) + (p.curve === 0.6 ? ' (기본)' : '') + '<small>절반 힘 → ' + scoreFromTable(50, pts) + '점</small></button>';
+    }).join('');
+    html += '<button type="button" class="btn preset' + (sc.curve == null ? ' on' : '') + '" data-curve="" title="그래프의 점을 끌거나 세부 점에서 고치면 여기로">직접<small>' + (sc.curve == null ? '고친 표' : '점을 끌어 고치기') + '</small></button>';
+    $('sc-presets').innerHTML = html;
+  }
+
+  function renderExamples() {
+    var t = sc.points, reach = null;
+    for (var i = 0; i < t.length; i++) if (t[i][1] >= MAX_SCORE) { reach = i === 0 ? t[0][0] : t[i - 1][0] + (t[i][0] - t[i - 1][0]) * (MAX_SCORE - t[i - 1][1]) / (t[i][1] - t[i - 1][1]); break; }
+    var ex = [10, 25, 50, 100, 150].map(function (p) {
+      return '<div class="ex">기준의 ' + p + '%<b>' + scoreFromTable(p, t) + '</b></div>';
+    }).join('');
+    ex += '<div class="ex" style="color: #FFB21E">9999점은<b>' + (reach == null ? '없음' : '기준의 ' + fmt(reach, 0) + '%') + '</b></div>';
+    $('sc-examples').innerHTML = ex;
+  }
+
+  function updateScoreMsg() {
+    var bad = sc.points.length < 2 || !(sc.ref > 0);
+    settingsMsg('t-msg', bad ? (sc.ref > 0 ? '점이 2개 이상 있어야 합니다' : '기준 힘 세기를 넣으세요') : scoreDirty() ? '바뀐 점수 설정은 "설정 저장"을 눌러야 반영됩니다' : '저장된 설정과 같습니다', bad ? false : scoreDirty() ? null : true);
   }
 
   function renderTableRows() {
-    $('t-rows').innerHTML = tableDraft.map(function (r, i) {
+    var t = sc.points;
+    $('t-rows').innerHTML = t.map(function (r, i) {
+      var slope = i === 0 ? (r[0] > 0 ? '0 ~ ' + fmt(r[0], 1) + '%: ' + fmt(r[1] / r[0], 0) + '점' : '시작점')
+        : fmt(t[i - 1][0], 1) + ' ~ ' + fmt(r[0], 1) + '%: ' + fmt((r[1] - t[i - 1][1]) / (r[0] - t[i - 1][0]), 0) + '점';
       return '<div class="trow"><div style="font-size: 18px; color: #8E7770">' + (i + 1) + '</div>' +
-        '<input type="number" step="0.5" min="0" data-i="' + i + '" data-k="0" aria-label="' + (i + 1) + '번 점 세기" value="' + esc(r[0]) + '">' +
-        '<input type="number" step="100" min="0" max="9999" data-i="' + i + '" data-k="1" aria-label="' + (i + 1) + '번 점 점수" value="' + esc(r[1]) + '">' +
-        '<div class="slope" data-slope="' + i + '"></div>' +
+        '<input type="number" step="5" min="0" data-i="' + i + '" data-k="0" aria-label="' + (i + 1) + '번 점 기준 힘 %" value="' + r[0] + '">' +
+        '<input type="number" step="100" min="0" max="9999" data-i="' + i + '" data-k="1" aria-label="' + (i + 1) + '번 점 점수" value="' + r[1] + '">' +
+        '<div class="slope">' + slope + '</div>' +
         '<button type="button" class="btn" data-del="' + i + '" title="이 점 지우기" style="width: 44px; padding: 0; color: #FF8A7A">✕</button></div>';
     }).join('');
-    updateSlopes();
   }
 
-  function updateSlopes() {
-    var t = draftTable();
-    tableDraft.forEach(function (r, i) {
-      var el = document.querySelector('[data-slope="' + i + '"]');
-      if (!el) return;
-      var a = parseFloat(r[0]), k = -1;
-      for (var j = 0; j < t.length; j++) if (t[j][0] === a) k = j;
-      if (k < 0) { el.textContent = '숫자를 넣으세요'; el.style.color = BAD; return; }
-      el.style.color = '';
-      if (k === 0) el.textContent = t[0][0] > 0 ? '0 ~ ' + t[0][0] + ': ' + fmt(t[0][1] / t[0][0], 0) + '점' : '시작점';
-      else el.textContent = t[k - 1][0] + ' ~ ' + t[k][0] + ': ' + fmt((t[k][1] - t[k - 1][1]) / (t[k][0] - t[k - 1][0]), 0) + '점';
-    });
-    var bad = draftTable().length < 2;
-    settingsMsg('t-msg', bad ? '점이 2개 이상 있어야 합니다' : '저장해야 점수에 반영됩니다 · 저장된 표: ' + (state.settings.scoreTable || []).length + '점', bad ? false : null);
+  function setRowsOpen(open) {
+    rowsOpen = open;
+    $('t-rows-box').hidden = !open;
+    $('sc-examples').hidden = open;
+    $('btn-t-rows').textContent = open ? '세부 점 닫기 ▴' : '세부 점 고치기 ▾';
+    var c = $('t-graph');
+    c.height = open ? 300 : 480;
+    c.style.height = (open ? 150 : 240) + 'px';
+    if (open) renderTableRows();
   }
 
-  function drawTable(t, liveS, maxS) {
-    var c = $('t-graph'), g = c.getContext('2d'), W = c.width, H = c.height, L = 90, B = 50, R = 20, T = 20;
+  // 그래프: x = 기준 힘의 %, y = 점수. 점을 끌어서 고친다
+  var G = { L: 96, B: 64, R: 24, T: 20, xmax: 200 };
+  function gx(v, W) { return G.L + (v / G.xmax) * (W - G.L - G.R); }
+  function gy(v, H) { return H - G.B - (v / MAX_SCORE) * (H - G.B - G.T); }
+
+  function drawTable(livePct, maxPct) {
+    var c = $('t-graph'), g = c.getContext('2d'), W = c.width, H = c.height, t = sc.points;
     g.clearRect(0, 0, W, H);
-    var xmax = Math.max(10, t.length ? t[t.length - 1][0] * 1.15 : 10, (liveS || 0) * 1.05, (maxS || 0) * 1.05);
-    var x = function (v) { return L + (v / xmax) * (W - L - R); };
-    var y = function (v) { return H - B - (v / MAX_SCORE) * (H - B - T); };
+    G.xmax = Math.max(120, t.length ? t[t.length - 1][0] * 1.1 : 120, (livePct || 0) * 1.05, (maxPct || 0) * 1.05);
+    var x = function (v) { return gx(v, W); }, y = function (v) { return gy(v, H); };
     g.strokeStyle = '#2E1B17'; g.lineWidth = 2; g.fillStyle = DIM; g.font = '26px sans-serif';
-    [0, 2500, 5000, 7500, 9999].forEach(function (v) { g.beginPath(); g.moveTo(L, y(v)); g.lineTo(W - R, y(v)); g.stroke(); g.fillText(String(v), 6, y(v) + 9); });
-    var step = xmax > 60 ? 20 : xmax > 30 ? 10 : 5;
-    for (var sx = 0; sx <= xmax; sx += step) { g.fillText(String(sx), x(sx) - 10, H - 14); }
-    g.fillText('세기', W - R - 60, H - 14);
+    [0, 2500, 5000, 7500, 9999].forEach(function (v) { g.beginPath(); g.moveTo(G.L, y(v)); g.lineTo(W - G.R, y(v)); g.stroke(); g.fillText(String(v), 6, y(v) + 9); });
+    var step = G.xmax > 400 ? 100 : G.xmax > 200 ? 50 : 25;
+    for (var px = 0; px <= G.xmax; px += step) {
+      g.strokeStyle = px === 100 ? '#5A3A33' : '#2E1B17';
+      g.beginPath(); g.moveTo(x(px), G.T); g.lineTo(x(px), H - G.B); g.stroke();
+      g.fillStyle = px === 100 ? AMBER : DIM; g.font = '26px sans-serif';
+      g.fillText(px + '%', x(px) - 22, H - G.B + 30);
+      if (sc.ref > 0 && H > 400) { g.fillStyle = '#5A443E'; g.font = '20px sans-serif'; g.fillText('세기 ' + fmt(px * sc.ref / 100, 1), x(px) - 34, H - G.B + 56); }
+    }
     if (t.length >= 2) {
       g.strokeStyle = AMBER; g.lineWidth = 5; g.beginPath();
       g.moveTo(x(0), y(scoreFromTable(0, t)));
       t.forEach(function (p) { g.lineTo(x(p[0]), y(p[1])); });
-      g.lineTo(x(xmax), y(t[t.length - 1][1]));
+      g.lineTo(x(G.xmax), y(t[t.length - 1][1]));
       g.stroke();
-      g.fillStyle = AMBER;
-      t.forEach(function (p) { g.beginPath(); g.arc(x(p[0]), y(p[1]), 9, 0, Math.PI * 2); g.fill(); });
+      t.forEach(function (p, i) {
+        g.fillStyle = i === dragIdx ? '#FFFFFF' : AMBER;
+        g.beginPath(); g.arc(x(p[0]), y(p[1]), i === dragIdx ? 13 : 9, 0, Math.PI * 2); g.fill();
+      });
     }
-    var mark = function (st, col, label) {
-      if (st == null) return;
-      var sc = scoreFromTable(st, t);
+    var mark = function (pc, col, label) {
+      if (pc == null) return;
+      var v = scoreFromTable(pc, t);
       g.strokeStyle = col; g.lineWidth = 3; g.setLineDash([10, 8]);
-      g.beginPath(); g.moveTo(x(st), y(0)); g.lineTo(x(st), y(sc)); g.lineTo(L, y(sc)); g.stroke(); g.setLineDash([]);
-      g.fillStyle = col; g.beginPath(); g.arc(x(st), y(sc), 12, 0, Math.PI * 2); g.fill();
-      g.font = '28px sans-serif'; g.fillText(label + ' ' + fmt(st, 1) + ' → ' + sc, Math.min(x(st) + 16, W - 330), y(sc) - 16);
+      g.beginPath(); g.moveTo(x(pc), y(0)); g.lineTo(x(pc), y(v)); g.lineTo(G.L, y(v)); g.stroke(); g.setLineDash([]);
+      g.fillStyle = col; g.beginPath(); g.arc(x(pc), y(v), 12, 0, Math.PI * 2); g.fill();
+      g.font = '28px sans-serif'; g.fillText(label + ' ' + fmt(pc, 0) + '% → ' + v, Math.min(x(pc) + 16, W - 340), Math.max(y(v) - 16, 44));
     };
-    if (maxS) mark(maxS, '#5AA9E6', '측정 최고');
-    mark(liveS || 0, '#FF6A45', '지금');
+    if (maxPct) mark(maxPct, '#5AA9E6', '측정 최고');
+    mark(livePct || 0, '#FF6A45', '지금');
   }
+
+  var dragIdx = -1;
+  function graphPos(e) {
+    var c = $('t-graph'), r = c.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * c.width / r.width, y: (e.clientY - r.top) * c.height / r.height, W: c.width, H: c.height };
+  }
+  $('t-graph').addEventListener('pointerdown', function (e) {
+    var p = graphPos(e), best = -1, bd = 40;
+    sc.points.forEach(function (q, i) {
+      var d = Math.hypot(gx(q[0], p.W) - p.x, gy(q[1], p.H) - p.y);
+      if (d < bd) { bd = d; best = i; }
+    });
+    if (best < 0) return;
+    dragIdx = best;
+    $('t-graph').setPointerCapture(e.pointerId);
+  });
+  $('t-graph').addEventListener('pointermove', function (e) {
+    if (dragIdx < 0) return;
+    var p = graphPos(e), t = sc.points, i = dragIdx;
+    var pc = (p.x - G.L) / (p.W - G.L - G.R) * G.xmax;
+    var v = (p.H - G.B - p.y) / (p.H - G.B - G.T) * MAX_SCORE;
+    var lo = i > 0 ? t[i - 1][0] + 0.5 : 0, hi = i < t.length - 1 ? t[i + 1][0] - 0.5 : 1000;
+    if (i === 0 && t[0][0] === 0) pc = 0; // 0% 점은 옆으로 움직이지 않는다
+    t[i] = [Math.round(Math.max(lo, Math.min(hi, pc)) * 10) / 10, Math.round(Math.max(0, Math.min(MAX_SCORE, v)) / 10) * 10];
+    sc.curve = null;
+    renderScoreEditor();
+  });
+  function endDrag() { dragIdx = -1; }
+  $('t-graph').addEventListener('pointerup', endDrag);
+  $('t-graph').addEventListener('pointercancel', endDrag);
 
   function renderSettings() {
     $('settings-version').textContent = state.version ? 'v' + state.version : '';
-    var emg = state.emg || {}, g = state.game || {}, t = draftTable();
+    var emg = state.emg || {}, g = state.game || {};
     var maxS = g.p1 && g.p1.rawMax ? g.p1.rawMax : 0;
-    drawTable(t, emg.strength || 0, maxS);
-    $('t-live').textContent = '지금 세기 ' + fmt(emg.strength, 1) + ' → ' + scoreFromTable(emg.strength || 0, t) + '점' +
-      (maxS ? ' · 마지막 측정 최고 세기 ' + fmt(maxS, 1) + ' → ' + scoreFromTable(maxS, t) + '점' : '');
-    $('s-live').textContent = emg.zeroing ? '영점 재는 중… 힘을 빼세요' : '거른 RMS ' + fmt(emg.rms, 1) + ' · 거르기 전 ' + fmt(emg.rmsRaw, 1) + ' · 저장된 영점 ' + fmt(emg.restRms, 2);
+    var livePct = pctOfStrength(emg.strength), maxPct = maxS ? pctOfStrength(maxS) : 0;
+    drawTable(livePct, maxPct);
+    $('t-live').textContent = '지금 힘 = 기준의 ' + fmt(livePct, 0) + '% → ' + scoreFromTable(livePct, sc.points) + '점' +
+      (maxS ? ' · 마지막 측정 최고 ' + fmt(maxPct, 0) + '% → ' + scoreFromTable(maxPct, sc.points) + '점' : '');
+    $('s-live').textContent = emg.zeroing ? '영점 재는 중… 힘을 빼세요' : '지금 거른 RMS ' + fmt(emg.rms, 1) + ' · 세기 ' + fmt(emg.strength, 1) + ' · 거르기 전 ' + fmt(emg.rmsRaw, 1);
     if (lastZeroing && !emg.zeroing) $('s-rest').value = Math.round((emg.restRms || 0) * 100) / 100; // 영점 잡기가 끝나면 입력칸에 넣는다
     lastZeroing = !!emg.zeroing;
+    var busy = g.phase === 'measuring';
+    ['btn-cal-full', 'btn-cal-noise', 'btn-ref-measure'].forEach(function (id) { $(id).disabled = busy; });
+    renderCalib();
   }
 
   function saveAllSettings() {
-    var t = draftTable();
-    if (t.length < 2) { settingsMsg('s-msg', '점수표에 점이 2개 이상 있어야 합니다.', false); return; }
+    if (sc.points.length < 2 || !(sc.ref > 0)) { settingsMsg('s-msg', '점수 설정을 확인하세요 (기준 힘 세기, 점 2개 이상).', false); return; }
     var num = function (id, def) { var v = parseFloat($(id).value); return isFinite(v) ? v : def; };
     var e = state.settings.emg || {};
     var next = {
-      scoreTable: t,
+      score: { ref: sc.ref, top: sc.top, curve: sc.curve, points: sc.points },
       askName: $('s-askname').checked,
       emg: {
         channel: parseInt($('s-channel').value, 10), mainsHz: parseInt($('s-mains').value, 10), notch: $('s-notch').checked,
@@ -867,28 +962,137 @@
     });
   }
 
-  $('t-rows').addEventListener('input', function (e) {
+  $('sc-presets').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button[data-curve]') : null;
+    if (!b || b.dataset.curve === '') return;
+    sc.curve = parseFloat(b.dataset.curve);
+    sc.points = curvePoints(sc.curve, sc.top);
+    renderScoreEditor();
+  });
+  $('sc-ref').addEventListener('input', function (e) {
+    var v = parseFloat(e.target.value);
+    if (isFinite(v) && v > 0) { sc.ref = Math.round(v * 100) / 100; renderScoreEditor(); }
+  });
+  $('sc-top').addEventListener('input', function (e) {
+    var v = parseFloat(e.target.value);
+    if (!(isFinite(v) && v >= 1 && v <= MAX_SCORE)) return;
+    v = Math.round(v);
+    if (sc.curve != null) sc.points = curvePoints(sc.curve, v);
+    else { var k = v / (sc.top || 7000); sc.points = sc.points.map(function (p) { return [p[0], Math.min(MAX_SCORE, Math.round(p[1] * k))]; }); }
+    sc.top = v;
+    renderScoreEditor();
+  });
+  $('t-rows').addEventListener('change', function (e) {
     var el = e.target;
     if (!el.dataset || el.dataset.i == null) return;
-    tableDraft[+el.dataset.i][+el.dataset.k] = el.value;
-    updateSlopes();
+    var v = parseFloat(el.value);
+    if (!isFinite(v) || v < 0) { renderTableRows(); return; }
+    sc.points[+el.dataset.i][+el.dataset.k] = el.dataset.k === '1' ? Math.min(MAX_SCORE, Math.round(v)) : Math.round(v * 10) / 10;
+    sc.points.sort(function (a, b) { return a[0] - b[0]; });
+    sc.points = sc.points.filter(function (p, i, t) { return i === 0 || p[0] !== t[i - 1][0]; });
+    sc.curve = null;
+    renderScoreEditor();
   });
   $('t-rows').addEventListener('click', function (e) {
     var b = e.target.closest ? e.target.closest('button[data-del]') : null;
-    if (!b) return;
-    tableDraft.splice(+b.dataset.del, 1);
-    renderTableRows();
+    if (!b || sc.points.length <= 2) return;
+    sc.points.splice(+b.dataset.del, 1);
+    sc.curve = null;
+    renderScoreEditor();
   });
   $('btn-t-add').addEventListener('click', function () {
-    var t = draftTable(), last = t.length ? t[t.length - 1] : [0, 0];
-    tableDraft.push([String(last[0] + 10), String(Math.min(MAX_SCORE, last[1]))]);
-    renderTableRows();
+    var last = sc.points.length ? sc.points[sc.points.length - 1] : [0, 0];
+    sc.points.push([Math.round((last[0] + 25) * 10) / 10, Math.min(MAX_SCORE, last[1])]);
+    sc.curve = null;
+    renderScoreEditor();
     $('t-rows').scrollTop = $('t-rows').scrollHeight;
   });
+  $('btn-t-rows').addEventListener('click', function () { setRowsOpen(!rowsOpen); });
   $('btn-t-default').addEventListener('click', function () {
-    tableDraft = (state.scoreTableDefault || []).map(function (p) { return [String(p[0]), String(p[1])]; });
-    renderTableRows();
+    var d = state.scoreDefault;
+    // 기준 힘은 이 노트북에서 잰 값을 그대로 두고 곡선만 기본으로
+    sc.top = d.top; sc.curve = d.curve; sc.points = copyPoints(d.points);
+    $('sc-top').value = sc.top;
+    renderScoreEditor();
   });
+
+  // ── 자동 보정 창 ──
+  var CAL_STEP = { rest: '쉬기', prep: '준비', squeeze: '최대 힘' };
+  var calShownFor = null;
+
+  function renderCalib() {
+    var c = state.calib || { phase: 'off' };
+    var on = c.phase !== 'off';
+    $('cal-modal').hidden = !on;
+    if (!on) { calShownFor = null; return; }
+    var r = c.result;
+    $('cal-title').textContent = c.mode === 'max' ? '최대 힘 재기' : c.mode === 'noise' ? '잡음만 다시 재기' : '자동 보정';
+    $('cal-steps').innerHTML = c.steps.map(function (s, i) {
+      var cls = c.phase === 'done' || i < c.step ? 'done' : i === c.step ? 'on' : '';
+      return '<div class="cal-step ' + cls + '">' + (i + 1) + '. ' + CAL_STEP[s] + (cls === 'done' ? ' ✓' : '') + '</div>';
+    }).join('');
+    $('cal-bar').style.width = Math.min(100, c.elapsed / c.total * 100) + '%';
+    var emg = state.emg || {};
+    var secs = Math.ceil(c.left / 1000);
+    if (c.phase === 'rest') { $('cal-big').textContent = '힘을 빼고 가만히'; $('cal-sub').textContent = secs + '초 · 센서를 붙인 채 팔을 편하게 두세요 (지금 RMS ' + fmt(emg.rms, 1) + ')'; }
+    else if (c.phase === 'prep') { $('cal-big').textContent = '곧 최대로 꽉! ' + secs; $('cal-sub').textContent = '신호가 나오면 4초 동안 최대로 쥐고 버티세요'; }
+    else if (c.phase === 'squeeze') { $('cal-big').innerHTML = '<span style="color:#FF6A45">지금 최대로 꽉!</span> ' + secs; $('cal-sub').textContent = '지금 RMS ' + fmt(emg.rms, 1); }
+    else { $('cal-big').textContent = r && r.ok ? (r.warnings.length ? '확인이 필요합니다' : '측정 완료') : '보정 실패'; $('cal-sub').textContent = r && r.ok ? '바뀌는 값을 보고 적용하세요' : ''; }
+    var done = c.phase === 'done';
+    $('btn-cal-apply').hidden = !(done && r && r.ok);
+    $('btn-cal-retry').hidden = !done;
+    $('btn-cal-cancel').textContent = done ? '닫기' : '취소';
+    $('cal-bar').parentNode.hidden = done;
+    var showRef = done && r && r.ok && r.maxStrength != null && r.mode === 'full';
+    $('cal-ref-wrap').hidden = !showRef;
+    if (!done) { $('cal-result').innerHTML = ''; return; }
+    var key = JSON.stringify(r);
+    if (calShownFor === key) return; // 결과는 한 번만 그린다 (체크박스 상태 유지)
+    calShownFor = key;
+    $('cal-useref').checked = true;
+    if (showRef) $('cal-ref-text').textContent = '이 최대 힘을 기준 힘으로 (세기 ' + fmt(savedScore().ref, 1) + ' → ' + fmt(r.maxStrength, 1) + ', 이 힘이 ' + sc.top + '점)';
+    $('cal-result').innerHTML = calResultHtml(c, r);
+  }
+
+  function calResultHtml(c, r) {
+    if (!r || !r.ok) return '<div class="cal-warn">' + esc((r && r.error) || '결과가 없습니다') + '</div>';
+    var e0 = state.settings.emg || {}, e1 = r.emg || {}, out = [];
+    if (r.mode !== 'max') {
+      var rows = [['채널', 'channel', '', 0], ['전원', 'mainsHz', ' Hz', 0], ['영점', 'restRms', '', 2], ['여유', 'margin', '', 1], ['고역', 'highpassHz', ' Hz', 0]];
+      out.push('<div class="cal-line change">' + rows.map(function (x) {
+        var a = e0[x[1]], b = e1[x[1]];
+        var same = typeof a === 'number' && Math.abs(a - b) < 0.01;
+        return x[0] + ' ' + (same ? fmt(b, x[3]) + x[2] : fmt(a, x[3]) + ' → <b>' + fmt(b, x[3]) + x[2] + '</b>');
+      }).join(' · ') + '</div>');
+    }
+    if (r.mode === 'max') out.push('<div class="cal-line change">기준 힘 세기 ' + fmt(savedScore().ref, 1) + ' → <b>' + fmt(r.maxStrength, 1) + '</b> (이 힘이 ' + sc.top + '점)</div>');
+    r.report.forEach(function (l) { out.push('<div class="cal-line" style="font-size: 16px; color: #8E7770">' + esc(l) + '</div>'); });
+    r.warnings.forEach(function (w) { out.push('<div class="cal-warn">⚠ ' + esc(w) + '</div>'); });
+    if (r.mode === 'full' && e0.highpassHz !== e1.highpassHz) out.push('<div class="cal-line">고역이 바뀌면 세기 크기도 바뀌므로 기준 힘도 같이 바꾸는 것이 좋습니다.</div>');
+    return out.join('');
+  }
+
+  function calStart(mode) { api.calibStart(mode); }
+  $('btn-cal-full').addEventListener('click', function () { calStart('full'); });
+  $('btn-cal-noise').addEventListener('click', function () { calStart('noise'); });
+  $('btn-ref-measure').addEventListener('click', function () { calStart('max'); });
+  $('btn-cal-cancel').addEventListener('click', function () { api.calibCancel(); });
+  $('btn-cal-retry').addEventListener('click', function () { calStart(state.calib.mode); });
+  $('btn-cal-apply').addEventListener('click', function () {
+    var c = state.calib, r = c.result;
+    api.calibApply({ useRef: $('cal-useref').checked }).then(function (s) {
+      if (!s) return;
+      state.settings = s;
+      fillSignal(); // 고치던 점수 곡선은 두고, 신호 칸과 기준 힘만 새 값으로
+      sc.ref = s.score.ref;
+      $('sc-ref').value = sc.ref;
+      renderScoreEditor();
+      var when = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      $('cal-last').textContent = when + ' ' + (c.mode === 'max' ? '기준 힘 ' + fmt(s.score.ref, 1) : '보정 적용') + (r.warnings.length ? ' (경고 ' + r.warnings.length + '개)' : '') + ' · 저장됨';
+      settingsMsg('s-msg', '보정 결과를 저장했습니다.', true);
+    });
+  });
+
   $('btn-s-save').addEventListener('click', saveAllSettings);
   $('btn-s-zero').addEventListener('click', function () { api.zeroEmg(); });
   $('btn-open-settings').addEventListener('click', function () { showPage(3); });
@@ -900,13 +1104,13 @@
   $('btn-export').addEventListener('click', function () {
     api.exportSettings().then(function (r) {
       if (r.canceled) return;
-      settingsMsg('file-msg', r.ok ? '저장한 설정(점수표 포함)을 내보냈습니다: ' + r.file : '내보내기 실패: ' + r.error, r.ok);
+      settingsMsg('file-msg', r.ok ? '저장한 설정을 내보냈습니다: ' + r.file : '내보내기 실패: ' + r.error, r.ok);
     });
   });
   $('btn-import').addEventListener('click', function () {
     api.importSettings().then(function (r) {
       if (r.canceled) return;
-      settingsMsg('file-msg', r.ok ? '가져왔습니다: ' + r.file + ' · 영점을 다시 잡으세요' : '가져오기 실패: ' + r.error, r.ok);
+      settingsMsg('file-msg', r.ok ? '가져왔습니다: ' + r.file + ' · "잡음만" 보정을 하세요' : '가져오기 실패: ' + r.error, r.ok);
       if (r.ok) api.getState().then(function (st) { state = st; fillSettings(); });
     });
   });

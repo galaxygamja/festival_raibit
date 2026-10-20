@@ -28,5 +28,8 @@ contextBridge.exposeInMainWorld('api', {
   cancelName: () => ipcRenderer.invoke('name:cancel'),
   exportSettings: () => ipcRenderer.invoke('settings:export'),
   importSettings: () => ipcRenderer.invoke('settings:import'),
+  calibStart: (mode) => ipcRenderer.invoke('calib:start', mode),
+  calibCancel: () => ipcRenderer.invoke('calib:cancel'),
+  calibApply: (opts) => ipcRenderer.invoke('calib:apply', opts),
   quit: () => ipcRenderer.invoke('app:quit'),
 });

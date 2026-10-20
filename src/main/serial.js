@@ -428,8 +428,8 @@ class SerialManager extends EventEmitter {
     // 선택 채널이 프레임 채널 수보다 크면 채널 1을 쓴다
     const want = ((this.getSettings().emg || {}).channel || 1) - 1;
     const idx = want < r.frames[0].length ? want : 0;
-    // 두 번째 인자: 장치가 알려 준 샘플레이트 (전원 잡음 필터 설계용)
-    this.emit('emg', r.frames.map((f) => f[idx]), Number(e.msgs.MSF) || 10000);
+    // 두 번째 인자: 장치가 알려 준 샘플레이트 (전원 잡음 필터 설계용), 세 번째: 모든 채널 프레임 (자동 보정의 채널 고르기용)
+    this.emit('emg', r.frames.map((f) => f[idx]), Number(e.msgs.MSF) || 10000, r.frames);
   }
 
   onHwt(e, hwt) {

@@ -6,7 +6,10 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Game, toScore, scoreFromTable, scoreOf, cleanScoreTable, DEFAULT_SCORE_TABLE } = require('../src/main/game');
+const {
+  Game, toScore, scoreFromTable, scoreOf, cleanScoreTable, DEFAULT_SCORE_TABLE, DEFAULT_SCORE, curvePoints, cleanScore, scoreFromLegacyTable, pctOf,
+} = require('../src/main/game');
+const { analyzeCalibration, AutoCal } = require('../src/main/calib');
 const hall = require('../src/main/hall');
 const { Store, normalizeSettings } = require('../src/main/store');
 
@@ -32,9 +35,14 @@ function test(name, fn) {
   }
 }
 
+/** 세기 = 점수 (ref × 1% 당 ref/100 점) 인 점수 설정 */
+function linear(ref = 9999) {
+  return { score: { ref, top: 9999, curve: null, points: [[0, 0], [100, 9999]] } };
+}
+
 function makeGame(settings) {
   const results = [];
-  const s = settings || { calibration: 1 };
+  const s = settings || linear();
   const g = new Game({ getSettings: () => s, onResult: (r) => results.push(r) });
   return { g, results, s };
 }
@@ -123,13 +131,78 @@ test('경기 중지: 기록 없이 IDLE, IDLE/RESULT 에서는 아무 일 없음
   assert.strictEqual(g.stop(), false);
 });
 
-test('보정계수는 숫자 하나, 0~9999 로 자름', () => {
-  const { g } = makeGame({ calibration: 0.5 });
+test('기준 힘 대비 % 로 점수, 0~9999 로 자름', () => {
+  const { g } = makeGame(linear(19998));
   g.start(0);
   feed(g, 0, 50, () => 1001);
   assert.strictEqual(g.p1.score, 501); // round(500.5)
   assert.strictEqual(toScore(-5, 1), 0);
   assert.strictEqual(toScore(6000, 2), 9999);
+});
+
+console.log('자동 보정');
+
+/** 가짜 SpikerBox 2채널: ch1 = 근육(쉼 RMS 2, 힘 RMS sq), ch2 = 연결 안 됨(잡음만). 둘 다 hum Hz 전원 잡음. 100 ms = 1000 샘플 */
+function calData(steps, { hum = 50, sq = 30, swap = false } = {}) {
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 * 2 - 1; };
+  const ch = [[], []], windows = [];
+  let n = 0;
+  steps.forEach(([phase, count]) => {
+    for (let w = 0; w < count; w++) {
+      const start = ch[0].length;
+      for (let i = 0; i < 1000; i++, n++) {
+        const h = 20 * Math.sin((2 * Math.PI * hum * n) / 10000);
+        const amp = phase === 'squeeze' ? sq : 2;
+        const a = Math.round(512 + h + rnd() * amp * Math.sqrt(3)), b = Math.round(512 + h + rnd() * 2 * Math.sqrt(3));
+        ch[0].push(swap ? b : a);
+        ch[1].push(swap ? a : b);
+      }
+      windows.push({ start, end: ch[0].length, phase });
+    }
+  });
+  return { channels: ch, windows };
+}
+const FULL_STEPS = [['rest', 50], ['prep', 25], ['squeeze', 40]];
+
+test('자동 보정: 50 Hz 지역이면 50 Hz, 힘이 보이는 채널, 영점·여유·최대 힘', () => {
+  const r = analyzeCalibration({ rate: 10000, ...calData(FULL_STEPS, { swap: true }), current: { channel: 1, mainsHz: 60, highpassHz: 80, margin: 1.5 }, mode: 'full' });
+  assert.ok(r.ok, r.error);
+  assert.deepStrictEqual([r.emg.mainsHz, r.emg.channel, r.emg.notch], [50, 2, true]);
+  assert.ok(r.emg.restRms > 1 && r.emg.restRms < 3, 'rest ' + r.emg.restRms);
+  assert.ok(r.emg.margin >= 0.5 && r.emg.margin < 2, 'margin ' + r.emg.margin);
+  assert.ok(r.maxStrength > 15, 'max ' + r.maxStrength);
+  assert.deepStrictEqual(r.warnings, []);
+});
+
+test('자동 보정: 잡음만 재면 채널·고역은 그대로, 힘이 안 보이면 경고하고 채널을 바꾸지 않는다', () => {
+  const noise = analyzeCalibration({ rate: 10000, ...calData([['rest', 50]], { hum: 60 }), current: { channel: 2, mainsHz: 50, highpassHz: 50 }, mode: 'noise' });
+  assert.deepStrictEqual([noise.emg.mainsHz, noise.emg.channel, noise.emg.highpassHz, noise.maxStrength], [60, 2, 50, null]);
+  const weak = analyzeCalibration({ rate: 10000, ...calData(FULL_STEPS, { sq: 2 }), current: { channel: 2 }, mode: 'full' });
+  assert.ok(weak.ok);
+  assert.strictEqual(weak.emg.channel, 2);
+  assert.ok(weak.warnings.some((w) => w.includes('거의 같습니다')));
+  assert.ok(!analyzeCalibration({ rate: 10000, channels: [[]], windows: [], current: {}, mode: 'full' }).ok);
+});
+
+test('자동 보정 진행: 쉼 5초 → 준비 → 힘 4초 뒤 분석, 취소하면 꺼진다', () => {
+  const cal = new AutoCal();
+  const d = calData(FULL_STEPS);
+  cal.start('full', 0);
+  assert.strictEqual(cal.status(0).phase, 'rest');
+  let t = 0, w = 0;
+  while (cal.running && t < 20000) {
+    const win = d.windows[Math.min(w++, d.windows.length - 1)];
+    cal.addFrames(d.channels[0].slice(win.start, win.end).map((v, i) => [v, d.channels[1][win.start + i]]), 10000);
+    t += 100;
+    cal.tick(t, { channel: 1 });
+  }
+  const st = cal.status(t);
+  assert.strictEqual(st.phase, 'done');
+  assert.ok(st.result.ok && st.result.maxStrength > 15 && st.result.emg.channel === 1, JSON.stringify(st.result));
+  assert.ok(t >= 11500 && t <= 11600);
+  cal.cancel();
+  assert.deepStrictEqual([cal.running, cal.status(t).phase], [false, 'off']);
 });
 
 console.log('명예의 전당');
@@ -220,7 +293,7 @@ test('v2.0.x 파일 옮기기: 명예의 전당 이름은 살리고, 나머지 �
 console.log('저장');
 
 const DEFAULTS = {
-  scoreTable: DEFAULT_SCORE_TABLE, askName: true,
+  score: DEFAULT_SCORE, askName: true,
   emg: { channel: 1, restRms: 0, filtered: true, margin: 1.5, mainsHz: 60, notch: true, highpassHz: 80 }, portRoles: {}, fullscreen: true,
 };
 
@@ -252,21 +325,26 @@ test('저장 후 다시 읽어도 유지 (앱 재시작 흉내), 손상 파일�
 
 test('설정값 범위 정리, v1 설정(calibration {p1,p2}) 이전', () => {
   assert.deepStrictEqual(normalizeSettings({ calibration: 'abc', fullscreen: 'yes' }), DEFAULTS);
-  assert.deepStrictEqual(normalizeSettings({ calibration: { p1: 2, p2: 3 } }).scoreTable.map((p) => p[0]), DEFAULT_SCORE_TABLE.map((p) => p[0]));
+  const v1 = normalizeSettings({ calibration: { p1: 2, p2: 3 } });
+  assert.ok(v1.score.ref > 0 && Math.abs(scoreOf(20, v1) - toScore(20, 2, 0.6)) <= 20); // p1 보정계수가 같은 점수로 옮겨진다
   const s = normalizeSettings({ calibration: -1, emg: { channel: 9, restRms: -4 }, portRoles: { a: 'start', b: 'x', c: 'spikerbox' } });
   assert.deepStrictEqual(s.emg, { ...DEFAULTS.emg });
   assert.deepStrictEqual(s.portRoles, { a: 'start', c: 'spikerbox' });
 });
 
-test('예전 설정 이전: 거르지 않은 영점은 지우고, 보정계수·곡선은 같은 모양의 점수표로', () => {
+test('예전 설정 이전: 거르지 않은 영점은 지우고, 보정계수·곡선·[세기, 점수] 표는 기준 힘 + % 표로', () => {
   const old = normalizeSettings({ calibration: 1, emg: { channel: 1, restRms: 32.4 } });
-  assert.deepStrictEqual(old.scoreTable, DEFAULT_SCORE_TABLE);
+  assert.deepStrictEqual(old.score, DEFAULT_SCORE);
   assert.strictEqual(old.emg.restRms, 0);
   const v217 = normalizeSettings({ calibration: 176, scoreCurve: 0.6, emg: { channel: 2, restRms: 2.5, filtered: true } });
-  assert.deepStrictEqual([v217.scoreTable, v217.emg.restRms, v217.emg.channel], [DEFAULT_SCORE_TABLE, 2.5, 2]);
+  assert.deepStrictEqual([v217.score, v217.emg.restRms, v217.emg.channel], [DEFAULT_SCORE, 2.5, 2]);
   const custom = normalizeSettings({ calibration: 300, scoreCurve: 1, emg: { filtered: true } });
-  assert.deepStrictEqual(custom.scoreTable.find((p) => p[0] === 10), [10, 3000]); // 직접 바꾼 보정은 표로 옮긴다
-  assert.ok(!('calibration' in custom));
+  assert.strictEqual(scoreOf(10, custom), 3000); // 직접 바꾼 보정은 같은 점수가 나오게 옮긴다
+  assert.ok(!('calibration' in custom) && !('scoreTable' in custom));
+  const v218 = normalizeSettings({ scoreTable: [[0, 0], [10, 3500], [40, 7000], [80, 9999]], emg: { filtered: true } });
+  assert.deepStrictEqual([v218.score.ref, v218.score.curve, scoreOf(10, v218), scoreOf(40, v218), scoreOf(60, v218)], [40, null, 3500, 7000, scoreFromTable(60, [[0, 0], [10, 3500], [40, 7000], [80, 9999]])]);
+  assert.deepStrictEqual(normalizeSettings({ scoreTable: DEFAULT_SCORE_TABLE, emg: { filtered: true } }).score, DEFAULT_SCORE);
+  assert.deepStrictEqual(normalizeSettings({ score: { ...DEFAULT_SCORE, ref: 55 } }).score.ref, 55);
   assert.strictEqual(normalizeSettings({ askName: false }).askName, false);
   assert.strictEqual(normalizeSettings({ emg: { mainsHz: 50, notch: false, highpassHz: -3, margin: 'x' } }).emg.mainsHz, 50);
   assert.deepStrictEqual(normalizeSettings({ emg: { mainsHz: 50, notch: false, highpassHz: -3, margin: 'x' } }).emg, { ...DEFAULTS.emg, mainsHz: 50, notch: false, highpassHz: 0 });
@@ -281,12 +359,23 @@ test('점수표: 구간마다 직선, 첫 점 아래는 0 에서, 마지막 점 
   assert.strictEqual(scoreFromTable(2, [[4, 800], [8, 900]]), 400);
   assert.deepStrictEqual(cleanScoreTable([[20, 99999], ['x', 1], [5, 100], [5, 200], [0, -4]]), [[0, 0], [5, 100], [20, 9999]]);
   assert.strictEqual(cleanScoreTable([[1, 1]]), null);
-  assert.strictEqual(scoreOf(31, { scoreTable: DEFAULT_SCORE_TABLE }), 7000);
-  assert.strictEqual(scoreOf(10, { calibration: 2 }), 20); // 표가 없으면 보정계수 (예전 방식)
-  const { g } = makeGame({ scoreTable: t });
+  assert.strictEqual(scoreOf(31, {}), 7000); // 설정이 없으면 기본 (기준 힘 31 = 7000점)
+  const { g } = makeGame({ score: { ref: 20, points: [[0, 0], [50, 1000], [100, 5000]] } });
   g.start(0);
-  g.sample('p1', 15, 100);
+  g.sample('p1', 15, 100); // 15 = 기준 20 의 75%
   assert.deepStrictEqual([g.snapshot().p1.score, g.snapshot().p1.rawMax], [3000, 15]);
+  assert.strictEqual(pctOf(15, { ref: 20 }), 75);
+});
+
+test('점수 곡선 점: 기준 힘(100%) = top, 9999 에 닿는 곳에서 끝, 기본은 2.1.8 표와 거의 같다', () => {
+  const pts = curvePoints(1, 5000);
+  assert.deepStrictEqual(pts[pts.length - 1], [200, 9999]);
+  assert.strictEqual(scoreFromTable(100, pts), 5000);
+  assert.strictEqual(scoreFromTable(50, curvePoints(0.6, 7000)), Math.round(7000 * Math.pow(0.5, 0.6)));
+  DEFAULT_SCORE_TABLE.forEach(([st, v]) => assert.ok(Math.abs(scoreOf(st, {}) - v) <= 80, st + ': ' + scoreOf(st, {}) + ' vs ' + v));
+  assert.strictEqual(cleanScore({ ref: 0, points: pts }), null);
+  assert.deepStrictEqual(cleanScore({ ref: 30, curve: 0.8, top: 6000 }).points, curvePoints(0.8, 6000)); // 점이 없으면 곡선으로 만든다
+  assert.strictEqual(scoreFromLegacyTable([[0, 0], [10, 2000]]).ref, 10); // 7000 에 못 미치면 마지막 점이 기준
 });
 
 test('이름 넣은 기록: 이름이 남고 결과에 id·이름이 온다, 빈 이름은 ㅇㅇㅇ', () => {
@@ -501,7 +590,7 @@ test('기록 전체 삭제: 빈 목록으로 저장하고 지우기 전 파일�
   assert.deepStrictEqual(again.loadRecords(), []);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'records.json.bak-123'), 'utf8')).records[0].score, 7812);
   // 파일이 없을 때도 실패하지 않는다
-  const { g } = makeGame({ calibration: 1 });
+  const { g } = makeGame();
   g.start(0);
   assert.strictEqual(g.clear(), false); // 측정 중에는 비우지 않는다
   g.tick(9000);
@@ -687,11 +776,11 @@ test('녹화: 100 ms 구간마다 CSV 한 줄, 원시값은 .raw 에 이어 쓰�
   r.setLabel('최대');
   r.addSamples([510, 514]);
   r.addSamples([512]);
-  r.addWindow({ rms: 1.634, rmsRaw: 9, strength: 0.5 }, { restRms: 1.1, calibration: 2, curve: 0.6, score: 1, phase: 'idle' }, 1100);
+  r.addWindow({ rms: 1.634, rmsRaw: 9, strength: 0.5 }, { restRms: 1.1, score: 1, phase: 'idle' }, 1100);
   r.setLabel('없는 표시');
-  r.addWindow(null, { restRms: 1.1, calibration: 2, curve: 0.6, phase: 'idle' }, 1200);
+  r.addWindow(null, { restRms: 1.1, phase: 'idle' }, 1200);
   r.addSamples([500]);
-  r.addWindow({ rms: 0, rmsRaw: 0, strength: 0 }, { restRms: 1.1, calibration: 2, curve: 0.6, score: 0, phase: 'measuring' }, 1300);
+  r.addWindow({ rms: 0, rmsRaw: 0, strength: 0 }, { restRms: 1.1, score: 0, phase: 'measuring' }, 1300);
   const st = r.status(1300);
   assert.strictEqual(st.rows, 3);
   assert.deepStrictEqual(st.labelCounts, { 최대: 1 });

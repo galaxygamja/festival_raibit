@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog } = require('electron');
-const { Game, scoreOf, DEFAULT_SCORE_TABLE } = require('./game');
+const { Game, scoreOf, pctOf, DEFAULT_SCORE, CURVE_PRESETS } = require('./game');
 const hall = require('./hall');
 const { Store, normalizeSettings } = require('./store');
 const { SerialManager } = require('./serial');
@@ -11,6 +11,7 @@ const { EmgWindow, EmgFilter, RestMeter, strengthOf } = require('./emg');
 const { Simulator } = require('./sim');
 const { Diag } = require('./diag');
 const { Recorder } = require('./recorder');
+const { AutoCal } = require('./calib');
 
 const argv = process.argv.slice(1);
 const START_SIM = argv.includes('--sim');
@@ -30,6 +31,7 @@ const emgWin = new EmgWindow(); // 거른 신호 (점수용)
 const rawWin = new EmgWindow(); // 거르기 전 신호 (진단 화면 비교용)
 const emgFilter = new EmgFilter();
 const rest = new RestMeter(3000);
+const autocal = new AutoCal(); // 관리자 3페이지 자동 보정 (쉼 → 최대 힘)
 let live = { raw: null, rms: 0, rmsRaw: 0, strength: 0, score: 0 };
 let lastRaw = null; // 선택 채널의 마지막 원시값 (관리자 화면 확인용)
 const diag = new Diag();
@@ -87,9 +89,12 @@ function payload() {
     emg: {
       raw: live.raw, rms: Math.round(live.rms * 10) / 10, rmsRaw: Math.round(live.rmsRaw * 10) / 10, strength: Math.round(live.strength * 10) / 10,
       score: live.score, restRms: settings.emg.restRms, margin: settings.emg.margin, zeroing: rest.running,
+      pct: Math.round(pctOf(live.strength, settings.score) * 10) / 10, // 기준 힘 대비 %
     },
     settings,
-    scoreTableDefault: DEFAULT_SCORE_TABLE,
+    scoreDefault: DEFAULT_SCORE,
+    curvePresets: CURVE_PRESETS,
+    calib: autocal.status(t),
     sim: sim.enabled,
     platform: process.platform,
     fullscreen: isFullscreen(),
@@ -115,7 +120,7 @@ function diagPayload(t) {
 
 /** 측정 시작. 이름 받기가 켜져 있고 이름이 없으면(관리자 버튼 제외) 시작하지 않고 이름 입력창을 띄운다 */
 function requestStart(fromAdmin) {
-  if (game.phase === 'measuring') return;
+  if (game.phase === 'measuring' || autocal.running) return;
   if (!fromAdmin && settings.askName && !nextName) {
     namePrompt = true;
     push();
@@ -138,7 +143,7 @@ function cleanPersonName(name) {
   return s || null;
 }
 
-const EXPORT_KEYS = ['scoreTable', 'askName', 'emg']; // 포트 역할·전체화면은 노트북마다 다르므로 빼고, 영점은 가져올 때 지금 값을 쓴다
+const EXPORT_KEYS = ['score', 'askName', 'emg']; // 포트 역할·전체화면은 노트북마다 다르므로 빼고, 영점은 가져올 때 지금 값을 쓴다
 
 function push(force) {
   if (!win || win.isDestroyed()) return;
@@ -267,7 +272,9 @@ function setupIpc() {
       if (!inc) return { ok: false, error: '설정 파일이 아닙니다' };
       const picked = {};
       EXPORT_KEYS.forEach((k) => { if (k in inc) picked[k] = inc[k]; });
-      settings = normalizeSettings({ ...settings, ...picked, emg: { ...settings.emg, ...(picked.emg || {}), restRms: settings.emg.restRms, filtered: true } });
+      const base = { ...settings };
+      if (!picked.score && inc.scoreTable) { picked.scoreTable = inc.scoreTable; delete base.score; } // 2.1.8 에서 내보낸 파일
+      settings = normalizeSettings({ ...base, ...picked, emg: { ...settings.emg, ...(picked.emg || {}), restRms: settings.emg.restRms, filtered: true } });
       saveSettings();
       push();
       return { ok: !lastSaveError, file: r.filePaths[0], error: lastSaveError };
@@ -319,7 +326,7 @@ function setupIpc() {
     recorder.start(now(), {
       started: new Date().toISOString(), version: app.getVersion(), platform: process.platform,
       device: { name: sb.name || null, hwt: sb.hwt || null, transport: sb.transport || null, channels: sb.channels || null },
-      sim: sim.enabled, emg: settings.emg, scoreTable: settings.scoreTable, windowMs: EMG_WINDOW_MS,
+      sim: sim.enabled, emg: settings.emg, score: settings.score, windowMs: EMG_WINDOW_MS,
       filter: 'rms 열 = 고역 통과(emg.highpassHz) ×2 + 전원 주파수(emg.mainsHz) 홀수 배수 노치 (emg.notch), rms_raw = 거르기 전, strength = rms - 영점 - emg.margin',
     });
     push();
@@ -331,6 +338,28 @@ function setupIpc() {
     else { require('fs').mkdirSync(recorder.dir, { recursive: true }); shell.openPath(recorder.dir); }
   });
   ipcMain.handle('emg:zero', () => { rest.start(now()); zeroStartedAt = now(); push(); });
+  // 자동 보정: mode = full (쉼 → 최대 힘, 신호 설정 전부 + 기준 힘) | noise (쉼만, 전원·영점·여유) | max (최대 힘만, 기준 힘)
+  ipcMain.handle('calib:start', (_e, mode) => {
+    if (game.phase === 'measuring') return false;
+    rest.stop();
+    autocal.start(mode, now());
+    push();
+    return true;
+  });
+  ipcMain.handle('calib:cancel', () => { autocal.cancel(); push(); });
+  // 결과 적용. useRef = 잰 최대 힘을 기준 힘(100%)으로
+  ipcMain.handle('calib:apply', (_e, opts) => {
+    const r = autocal.result;
+    if (!r || !r.ok) return null;
+    const next = { ...settings };
+    if (r.mode !== 'max') next.emg = { ...settings.emg, ...r.emg, filtered: true };
+    if ((r.mode === 'max' || (opts && opts.useRef)) && r.maxStrength >= 1) next.score = { ...settings.score, ref: r.maxStrength };
+    settings = normalizeSettings(next);
+    saveSettings();
+    autocal.cancel();
+    push();
+    return settings;
+  });
   ipcMain.handle('serial:setRole', (_e, p, role) => {
     if (typeof p !== 'string' || !['auto', 'spikerbox', 'start'].includes(role)) return false;
     // USB 시리얼번호가 있는 포트는 그 키로 저장해서 COM 번호·경로가 바뀌어도 역할이 따라가게 한다
@@ -389,7 +418,8 @@ app.whenReady().then(() => {
   });
 
   serial = new SerialManager({ getSettings: () => settings });
-  serial.on('emg', (values, rate) => {
+  serial.on('emg', (values, rate, frames) => {
+    if (autocal.running && frames) autocal.addFrames(frames, rate);
     emgFilter.configure(rate, settings.emg);
     emgWin.add(emgFilter.process(values));
     rawWin.add(values);
@@ -409,6 +439,7 @@ app.whenReady().then(() => {
 
   // 100 ms 마다: 그 사이 들어온 SpikerBox 샘플을 한 구간 세기로 만들어 게임에 넣는다
   setInterval(() => {
+    if (autocal.running && autocal.tick(now(), settings.emg)) push();
     const w = emgWin.take();
     const wr = rawWin.take();
     const t = now();
