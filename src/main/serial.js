@@ -110,6 +110,8 @@ class SerialManager extends EventEmitter {
     this.failures = new Map(); // 기기 키 -> { count, nextAt } 열기 실패 재시도 간격
     this.roleKeys = new Map(); // path -> 역할 저장 키
     this.openError = null; // { message, at } 마지막 SpikerBox(HID) 열기 실패
+    this.hidDevices = []; // 마지막 검색에서 본 HID 장치 (진단 화면용)
+    this.hidListOk = true;
     this.timer = null;
     this.scanning = false;
   }
@@ -180,6 +182,8 @@ class SerialManager extends EventEmitter {
   /** HID 장치: 사라진 것은 닫고, 멈춘 것은 다시 시작시키고, 새로 보이는 것은 연다 */
   scanHid(now) {
     const devs = this.hid.listDevices();
+    this.hidListOk = !!devs;
+    if (devs) this.hidDevices = devs;
     if (devs) {
       // 목록을 읽었을 때만 정리한다 (못 읽었으면 지금 열린 것은 그대로 둔다)
       const present = new Set(devs.map((d) => 'hid:' + d.path));
@@ -221,6 +225,7 @@ class SerialManager extends EventEmitter {
       hwt: null, name: null, hwtTries: 0, hwtTimer: null,
       lastFrameAt: 0, fpsStart: 0, fpsCount: 0, fps: 0,
       lastAliveAt: 0, lastStartAt: 0, openedAt: 0, restartAt: 0, gotFrames: false,
+      msgs: {}, startCount: 0, openedAtWall: Date.now(),
     };
     this.entries.set(path, e);
     return e;
@@ -372,6 +377,7 @@ class SerialManager extends EventEmitter {
     e.lastAliveAt = t;
     if (msg.type === 'start') {
       e.lastStartAt = t;
+      e.startCount++;
       this.emit('start');
     }
   }
@@ -396,6 +402,7 @@ class SerialManager extends EventEmitter {
     const r = e.parser.push(buf);
     for (const m of r.messages) {
       if (e.mode === 'probe') e.probeMessages.push(m);
+      if (m.type.length <= 8 && (m.type in e.msgs || Object.keys(e.msgs).length < 24)) e.msgs[m.type] = m.value.slice(0, 40);
       if (m.type === 'HWT') this.onHwt(e, m.value);
     }
     if (e.mode === 'probe') {
@@ -436,6 +443,41 @@ class SerialManager extends EventEmitter {
       e.parser.reset();
     }
     this.emit('device', { path: e.path, hwt, name: e.name });
+  }
+
+  /** 관리자 2페이지(진단)용: 열린 포트 하나하나의 상태, 재시도 대기, 보이는 HID 장치 */
+  diagnostics(now) {
+    const hex = (n) => (n == null ? '' : (Number(n) || 0).toString(16).padStart(4, '0'));
+    return {
+      entries: [...this.entries.values()].map((e) => ({
+        path: e.path,
+        mode: e.mode,
+        role: e.role,
+        fixed: e.fixed,
+        transport: e.virtual ? 'sim' : e.transport || 'serial',
+        baud: e.baud,
+        hwt: e.hwt,
+        name: e.name,
+        channels: e.parser.channels,
+        confidence: Math.round(e.parser.confidence * 100),
+        fps: now - e.lastFrameAt < SPIKER_ALIVE_MS ? e.fps : 0,
+        lastFrameAgo: e.lastFrameAt ? now - e.lastFrameAt : null,
+        lastAliveAgo: e.lastAliveAt ? now - e.lastAliveAt : null,
+        lastStartAt: e.lastStartAt || null,
+        startCount: e.startCount,
+        restarting: !!e.restartAt,
+        msgs: e.msgs,
+        roleKey: this.roleKeyOf(e.path),
+        openedAt: e.openedAtWall,
+      })).sort((a, b) => (a.path < b.path ? -1 : 1)),
+      failures: [...this.failures].map(([key, f]) => ({ key, count: f.count, waitMs: Math.max(0, f.nextAt - now) })),
+      hidListOk: this.hidListOk,
+      hidDevices: this.hidDevices.map((d) => ({
+        path: d.path, product: d.product || '', manufacturer: d.manufacturer || '', serialNumber: d.serialNumber || '',
+        vendorId: hex(d.vendorId), productId: hex(d.productId), usagePage: hex(d.usagePage), release: d.release,
+      })),
+      openError: this.openError ? { message: this.openError.message, ago: now - this.openError.at } : null,
+    };
   }
 
   status(now) {

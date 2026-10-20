@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current status: v2.1.3
+## Current status: v2.1.4
 
 The v1→v2 migration (2-player Arduino contest → 1-player record mode fed by a SpikerBox) is code-complete and documented in `PLAN.md` (Phases 1–4 and checklist steps 1–10 done). **Only step 11, the on-site hardware test, remains**: real SpikerBox/EMG, macOS 222222 baud, calibration default, START Arduino, Windows exe. Update PLAN.md first if that testing changes a decision.
 
@@ -48,6 +48,7 @@ Electron app, two processes, no bundler. UI is fixed at 1440×900 design pixels 
 - `game.js` is a pure state machine (IDLE → MEASURING → RESULT) that takes `now` as an argument so tests can drive the clock. The calibration factor is applied per sample in `toScore`.
 - `sim.js` replaces the hardware: it emits a fake SpikerBox byte stream, so it exercises the real parser and RMS path. For demos it uses the 14-bit range (center 8192) and picks a random strength per `A` press, so scores land around 4000–7500 at calibration 1 and the level gauges light up.
 - `hall.js` holds the pure record/ranking rules (`addResult`, `hallOf`, `editRecords`, `deleteRecords`, `migrateRecords`). `store.js` persists `settings.json` and `records.json` in `userData`: write temp → fsync → rename, retry on Windows EPERM/EBUSY, and move unreadable files to `*.corrupt-<time>`. `normalizeSettings` migrates the v1 `calibration: {p1, p2}`. When `records.json` is missing, `main.js` migrates the v2.0.x `hall-of-fame.json` + `score-history.json` once (old files are left in place), and `normalizeRecords` drops the v1 `player` field.
+- Admin has two pages: page 1 (records, game control, calibration) and page 2 "진단" (`#diag`: raw waveform, 100 ms RMS history, signal numbers, per-port/HID details, recent logs). `diag.js` keeps a 20000-sample ring of the selected channel; `payload.diag` (from `diagPayload()`, which also includes `serial.diagnostics()` and a console ring buffer) is only sent while page 2 is open (`diag:set`).
 - The full record list is not in the pushed payload (it can be large). The payload carries `hall` (top 5), `recordsRev`, and `recordsTotal`; the admin screen calls `records:get` when `recordsRev` changes.
 - **Renderer** (`src/renderer/`) is plain HTML/JS under a strict CSP (`self` only). It talks to main only through `window.api` defined in `src/preload.js` (contextIsolation + sandbox). Adding a feature that needs main usually means three edits: an IPC handler in `main.js`, a method in `preload.js`, and a call in `app.js`.
 - A `requestAnimationFrame` loop in `app.js` exponentially smooths displayed numbers (`SMOOTH_MS`). The 7-segment digits come from `segments.js`.

@@ -45,6 +45,16 @@ a:hover { color: #FFD27A; }
 }
 #main { gap: 40px; }
 #admin { gap: 32px; }
+#diag { gap: 20px; }
+#diag ::-webkit-scrollbar { width: 8px; }
+#diag ::-webkit-scrollbar-thumb { background: #4A2E28; border-radius: 4px; }
+#diag ::-webkit-scrollbar-track { background: transparent; }
+.kv { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 1px 10px; font-size: 17px; }
+.kv > div:nth-child(odd) { color: #8E7770; white-space: nowrap; }
+.kv > div:nth-child(even) { color: #F3E6E1; min-width: 0; overflow-wrap: anywhere; }
+.num { display: flex; flex-direction: column; min-width: 0; }
+.num span { font-size: 14px; overflow: hidden; text-overflow: ellipsis; color: #8E7770; white-space: nowrap; }
+.num b { font-weight: 400; font-size: 23px; color: #F3E6E1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .screen[hidden] { display: none; }
 
 #admin input, #admin button { user-select: auto; }

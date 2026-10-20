@@ -17,10 +17,11 @@
     <div id="app-version" style="position: absolute; right: 56px; bottom: 12px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
     <div style="display: flex; align-items: center; gap: 20px">
       <h1 style="margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5)">관리자 모드</h1>
-      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px; font-size: 22px; color: #B8A29B">
+      <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 22px; color: #B8A29B; white-space: nowrap; overflow: hidden">
         <div>관중 화면은 이 창이 닫히면 다시 보입니다</div>
         <div style="font-size: 19px">열기 <span id="shortcut" style="color: #E9DAD5"></span> · 닫기 <span style="color: #E9DAD5">Esc</span> · 전체화면 전환 <span id="fs-shortcut" style="color: #E9DAD5"></span></div>
       </div>
+      <button type="button" id="btn-page2" title="연결 상태·원시값·RMS 등 진단 정보" style="height: 52px; padding: 0 22px; border-radius: 14px; border: 2px solid #FFB21E; background: transparent; color: #FFB21E; font-family: inherit; font-size: 24px; cursor: pointer; white-space: nowrap">2페이지 · 진단</button>
       <button type="button" id="btn-fullscreen" style="height: 52px; padding: 0 22px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 24px; cursor: pointer"></button>
       <button type="button" id="btn-close" style="height: 52px; padding: 0 26px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 24px; cursor: pointer">스코어보드로 돌아가기</button>
     </div>
@@ -85,6 +86,78 @@
         </div>
 
       </div>
+    </div>
+  </div>
+
+  <div id="diag" class="screen" hidden>
+    <div id="diag-version" style="position: absolute; right: 56px; bottom: 12px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
+    <div style="display: flex; align-items: center; gap: 20px">
+      <h1 style="margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); white-space: nowrap">관리자 모드 · 진단</h1>
+      <div style="flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">실시간 연결·신호 확인 · 닫기 Esc</div>
+      <button type="button" id="btn-page1" style="height: 52px; padding: 0 22px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 24px; cursor: pointer; white-space: nowrap">‹ 1페이지 · 기록·설정</button>
+      <button type="button" id="btn-close2" style="height: 52px; padding: 0 22px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 24px; cursor: pointer; white-space: nowrap">스코어보드로 돌아가기</button>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: 560px minmax(0, 1fr) minmax(0, 1fr); gap: 16px">
+
+      <div style="display: flex; flex-direction: column; gap: 14px; min-height: 0">
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px; min-height: 0">
+          <div style="display: flex; align-items: baseline; gap: 12px">
+            <h2 style="margin: 0; font-size: 24px; font-weight: 400; flex-grow: 1">원시 파형 · 최근 1초</h2>
+            <div id="d-scope-range" style="font-size: 17px; color: #B8A29B"></div>
+          </div>
+          <canvas id="d-scope" width="1040" height="280" style="width: 520px; height: 140px; border-radius: 10px; background: #120807"></canvas>
+        </div>
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px; min-height: 0">
+          <div style="display: flex; align-items: baseline; gap: 12px">
+            <h2 style="margin: 0; font-size: 24px; font-weight: 400; flex-grow: 1">100 ms 세기 · 최근 10초</h2>
+            <div style="font-size: 17px"><span style="color: #FFB21E">■ RMS</span> <span style="color: #FF6A45">■ 세기(휴식 뺀 값)</span></div>
+          </div>
+          <canvas id="d-hist" width="1040" height="180" style="width: 520px; height: 90px; border-radius: 10px; background: #120807"></canvas>
+        </div>
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <h2 style="margin: 0; font-size: 24px; font-weight: 400; flex-grow: 1">신호 수치</h2>
+            <button type="button" id="btn-diag-reset" title="최소·최대·누적 수치를 다시 잽니다" style="height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer">범위 초기화</button>
+            <button type="button" id="btn-zero2" style="height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer">영점 잡기</button>
+          </div>
+          <div id="d-signal" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 14px"></div>
+        </div>
+      </div>
+
+      <div class="diag-col" style="display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto">
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: none">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 400">SpikerBox</h2>
+          <div id="d-spiker"></div>
+        </div>
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: none">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 400">START 버튼 (아두이노)</h2>
+          <div id="d-start"></div>
+        </div>
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: none">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 400">측정 상태</h2>
+          <div id="d-game"></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px; min-height: 0">
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: none; max-height: 330px; overflow-y: auto">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <h2 style="margin: 0; font-size: 24px; font-weight: 400; flex-grow: 1; white-space: nowrap">포트 · USB</h2>
+            <button type="button" id="btn-reconnect2" style="white-space: nowrap; height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer">포트 다시 연결</button>
+          </div>
+          <div id="d-ports" style="display: flex; flex-direction: column; gap: 8px"></div>
+        </div>
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: none">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 400">앱 · 설정</h2>
+          <div id="d-env"></div>
+        </div>
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 400">최근 로그</h2>
+          <div id="d-logs" style="flex: 1; min-height: 0; overflow-y: auto; font-family: Menlo, Consolas, monospace; font-size: 12px; line-height: 1.45; color: #C9B3AC; white-space: pre-wrap; word-break: break-all"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 

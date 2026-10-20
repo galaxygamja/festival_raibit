@@ -366,7 +366,208 @@
   function render() {
     if (!state) return;
     renderMain();
-    if (adminOpen) renderAdmin();
+    if (adminOpen) { if (adminPage === 2) renderDiag(); else renderAdmin(); }
+  }
+
+
+  // ───────────────────────── 관리자 2페이지: 진단 ─────────────────────────
+  var adminPage = 1;
+  var GOOD = '#7BE08A', BAD = '#FF8A7A', DIM = '#8E7770';
+
+  function kv(rows) {
+    return '<div class="kv">' + rows.map(function (r) {
+      var v = r[1] == null || r[1] === '' ? '-' : String(r[1]);
+      return '<div>' + esc(r[0]) + '</div><div' + (r[2] ? ' style="color:' + r[2] + '"' : '') + '>' + esc(v) + '</div>';
+    }).join('') + '</div>';
+  }
+
+  function ago(ms) {
+    if (ms == null) return '없음';
+    if (ms < 1000) return ms + ' ms 전';
+    if (ms < 60000) return (ms / 1000).toFixed(1) + '초 전';
+    return Math.floor(ms / 60000) + '분 ' + Math.floor((ms % 60000) / 1000) + '초 전';
+  }
+
+  function dur(ms) {
+    var s = Math.floor(ms / 1000);
+    return Math.floor(s / 3600) + '시간 ' + Math.floor((s % 3600) / 60) + '분 ' + (s % 60) + '초';
+  }
+
+  function fmt(v, d) {
+    if (v == null || !isFinite(v)) return '-';
+    return d ? Number(v).toFixed(d) : String(Math.round(v));
+  }
+
+  var ROLE_NAMES = { spikerbox: 'SpikerBox', start: 'START', probing: '확인 중' };
+  var MODE_NAMES = { spikerbox: 'SpikerBox', text: '텍스트(9600)', probe: '탐색 중' };
+  var PHASE_NAMES = { idle: '대기', measuring: '측정 중', result: '결과' };
+
+  function drawScope(sig) {
+    var c = $('d-scope'), g = c.getContext('2d'), W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    var sc = sig.scope || [];
+    if (!sc.length) {
+      g.fillStyle = DIM; g.font = '28px sans-serif'; g.fillText('신호 없음', 24, 48);
+      $('d-scope-range').textContent = '';
+      return;
+    }
+    var lo = Infinity, hi = -Infinity;
+    sc.forEach(function (b) { if (b[0] < lo) lo = b[0]; if (b[1] > hi) hi = b[1]; });
+    var pad = Math.max(4, (hi - lo) * 0.1);
+    var y0 = lo - pad, y1 = hi + pad;
+    var y = function (v) { return H - ((v - y0) / (y1 - y0)) * H; };
+    // 평균선
+    if (sig.sec && sig.sec.mean != null) {
+      g.strokeStyle = '#4A2E28'; g.lineWidth = 2; g.beginPath();
+      g.moveTo(0, y(sig.sec.mean)); g.lineTo(W, y(sig.sec.mean)); g.stroke();
+    }
+    g.strokeStyle = '#FF6A45'; g.lineWidth = Math.max(2, W / sc.length * 0.8);
+    g.beginPath();
+    var step = W / sc.length;
+    sc.forEach(function (b, i) {
+      var x = i * step + step / 2;
+      g.moveTo(x, y(b[1]) - 1); g.lineTo(x, y(b[0]) + 1);
+    });
+    g.stroke();
+    $('d-scope-range').textContent = '세로 ' + fmt(y0) + ' ~ ' + fmt(y1) + ' · 평균선 ' + fmt(sig.sec.mean, 1);
+  }
+
+  function drawHist(sig) {
+    var c = $('d-hist'), g = c.getContext('2d'), W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    var h = sig.history || [], top = 10;
+    h.forEach(function (p) { if (p && p[0] > top) top = p[0]; });
+    top *= 1.1;
+    var n = 100, bw = W / n;
+    var off = n - h.length;
+    h.forEach(function (p, i) {
+      var x = (off + i) * bw;
+      if (!p) { g.fillStyle = '#2E1B17'; g.fillRect(x, 0, bw - 2, H); return; }
+      g.fillStyle = 'rgba(255,178,30,0.55)'; g.fillRect(x, H - (p[0] / top) * H, bw - 2, (p[0] / top) * H);
+      g.fillStyle = '#FF6A45'; g.fillRect(x + bw * 0.25, H - (p[1] / top) * H, bw * 0.5 - 1, (p[1] / top) * H);
+    });
+    g.fillStyle = DIM; g.font = '22px sans-serif'; g.fillText('최대 ' + fmt(top, 1), 10, 26);
+  }
+
+  function renderDiag() {
+    var d = state.diag;
+    $('diag-version').textContent = state.version ? 'v' + state.version : '';
+    if (!d) return;
+    var sig = d.signal, ser = d.serial, ps = state.ports || {}, sb = ps.spikerbox || {}, st = ps.start || {};
+    var emg = state.emg || {}, set = state.settings || {}, cal = set.calibration || 1;
+    drawScope(sig);
+    drawHist(sig);
+
+    var score = Math.min(MAX_SCORE, Math.round((emg.strength || 0) * cal));
+    var top = sig.bits ? Math.pow(2, sig.bits) - 1 : null;
+    var nums = [
+      ['원시값 (지금)', fmt(sig.win.last)],
+      ['평균 (100 ms)', fmt(sig.win.mean, 1)],
+      ['최소 ~ 최대 (100 ms)', sig.win.n ? sig.win.min + ' ~ ' + sig.win.max : '-'],
+      ['RMS (100 ms)', fmt(emg.rms, 1)],
+      ['휴식 RMS (영점)', fmt(emg.restRms, 1) + (emg.zeroing ? ' · 재는 중' : '')],
+      ['세기 = RMS − 휴식', fmt(emg.strength, 1)],
+      ['점수 = 세기 × ' + cal, String(score)],
+      ['게이지 단계', levelOf(score) + ' / 15'],
+      ['초당 샘플', sig.rate ? sig.rate.toLocaleString() : '-'],
+      ['1초 최소 ~ 최대', sig.sec.n ? sig.sec.min + ' ~ ' + sig.sec.max : '-'],
+      ['누적 최소 ~ 최대', sig.range.min == null ? '-' : sig.range.min + ' ~ ' + sig.range.max],
+      ['추정 해상도', sig.bits ? sig.bits + '비트 (0~' + top + ')' : '-'],
+      ['끝값 닿음 (1초)', sig.bits ? sig.clip + '개' : '-'],
+      ['받은 샘플 합계', sig.total.toLocaleString()],
+      ['마지막 샘플', ago(sig.lastAgo)],
+    ];
+    $('d-signal').innerHTML = nums.map(function (n, i) {
+      var color = i === 12 && sig.clip > 0 ? ' style="color:' + BAD + '"' : i === 6 ? ' style="color:' + AMBER + '"' : '';
+      return '<div class="num"><span>' + esc(n[0]) + '</span><b' + color + '>' + esc(n[1]) + '</b></div>';
+    }).join('');
+
+    var spEntry = null, stEntry = null;
+    ser.entries.forEach(function (e) {
+      if (e.path === sb.path) spEntry = e;
+      if (e.path === st.path) stEntry = e;
+    });
+    var msgs = spEntry ? Object.keys(spEntry.msgs).map(function (k) { return k + ':' + spEntry.msgs[k]; }).join('  ') : '';
+    $('d-spiker').innerHTML = kv([
+      ['상태', sb.connected ? '연결됨 · 신호 수신 중' : sb.path ? '열려 있지만 신호 없음' : '찾지 못함', sb.connected ? GOOD : BAD],
+      ['연결 방식', spEntry && spEntry.transport === 'sim' ? '시뮬레이션' : sb.transport === 'hid' ? 'USB HID' : sb.transport === 'serial' ? '시리얼 ' + sb.baud + ' baud' : null],
+      ['장치', sb.name],
+      ['HWT', sb.hwt],
+      ['채널', sb.channels ? sb.channels + '채널 · 쓰는 채널 ' + ((set.emg || {}).channel || 1) : null],
+      ['프레임/초', sb.fps ? sb.fps.toLocaleString() : '0'],
+      ['채널 판별 신뢰도', spEntry ? spEntry.confidence + '%' : null],
+      ['마지막 프레임', spEntry ? ago(spEntry.lastFrameAgo) : null],
+      ['다시 시작 중', spEntry && spEntry.restarting ? 'start 명령 보냄, 응답 기다리는 중' : '아니요', spEntry && spEntry.restarting ? AMBER : null],
+      ['장치 메시지', msgs],
+      ['경로', sb.path],
+      ['열기 오류', ser.openError ? ser.openError.message + ' (' + ago(ser.openError.ago) + ')' : '없음', ser.openError ? BAD : null],
+    ]);
+    $('d-start').innerHTML = kv([
+      ['상태', st.connected ? '연결됨' : st.path ? '열려 있지만 신호 없음' : '찾지 못함', st.connected ? GOOD : BAD],
+      ['경로', st.path],
+      ['마지막 ALIVE', stEntry ? ago(stEntry.lastAliveAgo) : null],
+      ['마지막 START', st.lastStartAt ? timeText(st.lastStartAt) : '없음'],
+      ['START 횟수', stEntry ? stEntry.startCount + '번 (이번 연결)' : null],
+    ]);
+    var g = state.game || {};
+    $('d-game').innerHTML = kv([
+      ['단계', PHASE_NAMES[g.phase] || g.phase],
+      ['샘플', g.p1 ? g.p1.samples + ' / ' + g.samplesNeeded : null],
+      ['최고 (최종 점수)', g.p1 ? g.p1.score : null],
+      ['방금 값', g.p1 ? g.p1.current : null],
+      ['마지막 결과', state.result ? state.result.score + '점 · 전체 ' + (state.result.place || '-') + '위 / ' + state.result.total : '없음'],
+      ['기록 수', state.recordsTotal],
+    ]);
+
+    var portHtml = ser.entries.map(function (e) {
+      var ok = e.mode === 'spikerbox' ? e.fps > 0 : e.mode === 'text' ? e.lastAliveAgo != null && e.lastAliveAgo < 3000 : false;
+      var bits = [MODE_NAMES[e.mode] || e.mode, e.transport === 'hid' ? 'HID' : e.transport === 'sim' ? '시뮬레이션' : e.baud ? e.baud + ' baud' : '',
+        e.mode === 'spikerbox' ? e.fps.toLocaleString() + ' fps' : '', e.fixed ? '역할 고정' : '자동', e.hwt || ''].filter(Boolean).join(' · ');
+      return '<div style="padding: 6px 10px; border-radius: 10px; background: #241411">' +
+        '<div style="display: flex; gap: 8px; align-items: center; font-size: 17px"><span style="width: 10px; height: 10px; border-radius: 5px; flex: none; background:' + (ok ? '#4CD964' : '#FF5A47') + '"></span>' +
+        '<span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap" title="' + esc(e.path) + '">' + esc(e.path) + '</span></div>' +
+        '<div style="font-size: 15px; color: #B8A29B; margin-left: 18px">' + esc(bits) + '</div>' +
+        (e.roleKey !== e.path ? '<div style="font-size: 13px; color: ' + DIM + '; margin-left: 18px">역할 키 ' + esc(e.roleKey) + '</div>' : '') +
+        '</div>';
+    }).join('');
+    if (!ser.entries.length) portHtml = '<div style="font-size: 17px; color: ' + DIM + '">열린 포트 없음</div>';
+    var hidHtml = '<div style="font-size: 16px; color: #B8A29B; margin-top: 4px">BackyardBrains HID 장치 (0x2E73)' + (ser.hidListOk ? '' : ' · 목록 읽기 실패') + '</div>' +
+      (ser.hidDevices.length ? ser.hidDevices.map(function (h) {
+        return '<div style="font-size: 14px; color: #C9B3AC; margin-left: 10px; overflow-wrap: anywhere">' +
+          esc([h.product || '이름 없음', h.vendorId + ':' + h.productId, h.serialNumber ? 'S/N ' + h.serialNumber : '', h.usagePage ? 'usage ' + h.usagePage : ''].filter(Boolean).join(' · ')) + '</div>';
+      }).join('') : '<div style="font-size: 14px; color: ' + DIM + '; margin-left: 10px">없음</div>');
+    var failHtml = ser.failures.length ? '<div style="font-size: 16px; color: ' + BAD + '; margin-top: 4px">열기 재시도 대기</div>' + ser.failures.map(function (f) {
+      return '<div style="font-size: 14px; color: #C9B3AC; margin-left: 10px; overflow-wrap: anywhere">' + esc(f.key) + ' · ' + f.count + '번 실패 · ' + (f.waitMs / 1000).toFixed(1) + '초 뒤</div>';
+    }).join('') : '';
+    $('d-ports').innerHTML = portHtml + hidHtml + failHtml;
+
+    var env = d.env;
+    $('d-env').innerHTML = kv([
+      ['버전', 'v' + state.version + (env.packaged ? ' · 설치본' : ' · 개발 실행')],
+      ['실행 시간', dur(env.uptime)],
+      ['환경', env.platform + ' ' + env.arch + ' · Electron ' + env.electron],
+      ['보정계수 · 채널', cal + ' · ' + ((set.emg || {}).channel || 1) + '번'],
+      ['시뮬레이션', state.sim ? '켜짐' : '꺼짐', state.sim ? AMBER : null],
+    ]) + '<div style="font-size: 13px; color: #8E7770; overflow-wrap: anywhere" title="' + esc(state.dataDir || '') + '">데이터 폴더 ' + esc(state.dataDir || '-') + '</div>';
+
+    var logs = d.logs.slice().reverse().map(function (l) {
+      var c = l.level === 'error' ? BAD : l.level === 'warn' ? AMBER : '#C9B3AC';
+      return '<div style="color:' + c + '">' + timeText(l.at) + ' ' + esc(l.text) + '</div>';
+    }).join('');
+    var box = $('d-logs');
+    if (box.dataset.key !== String(d.logs.length) + (d.logs.length ? d.logs[d.logs.length - 1].at : '')) {
+      box.dataset.key = String(d.logs.length) + (d.logs.length ? d.logs[d.logs.length - 1].at : '');
+      box.innerHTML = logs || '<div style="color:' + DIM + '">로그 없음</div>';
+    }
+  }
+
+  function showPage(n) {
+    adminPage = n;
+    $('admin').hidden = n !== 1;
+    $('diag').hidden = n !== 2;
+    if (document.activeElement) document.activeElement.blur();
+    api.setDiag(n === 2);
+    if (n === 1) { renderAdminRows(true); fillSettingsInputs(); renderAdmin(); } else { renderDiag(); }
   }
 
   // ───────────────────────── 관리자 화면 열기 / 닫기 ─────────────────────────
@@ -377,18 +578,18 @@
   function openAdmin() {
     adminOpen = true;
     releaseSimKeys();
-    $('admin').hidden = false;
     $('main').hidden = true;
-    renderAdminRows(true);
-    fillSettingsInputs();
-    renderAdmin();
+    showPage(1);
   }
 
   function closeAdmin() {
     adminOpen = false;
     if (document.activeElement) document.activeElement.blur();
     $('admin').hidden = true;
+    $('diag').hidden = true;
     $('main').hidden = false;
+    if (adminPage === 2) api.setDiag(false);
+    adminPage = 1;
   }
 
   function recordsMsg(text, ok) {
@@ -446,6 +647,12 @@
   }
 
   $('btn-close').addEventListener('click', closeAdmin);
+  $('btn-close2').addEventListener('click', closeAdmin);
+  $('btn-page2').addEventListener('click', function () { showPage(2); });
+  $('btn-page1').addEventListener('click', function () { showPage(1); });
+  $('btn-diag-reset').addEventListener('click', function () { api.resetDiag(); });
+  $('btn-zero2').addEventListener('click', function () { api.zeroEmg(); });
+  $('btn-reconnect2').addEventListener('click', function () { api.reconnect(); });
   $('btn-fullscreen').addEventListener('click', function () { api.toggleFullscreen(); });
   $('btn-start').addEventListener('click', function () { api.start(); });
   $('btn-stop').addEventListener('click', function () { api.stop(); });

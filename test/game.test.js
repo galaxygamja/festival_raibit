@@ -17,6 +17,7 @@ const { Simulator } = require('../src/main/sim');
 const { SpikerBoxParser, parseMessageText, encodeFrames, encodeMessage } = require('../src/main/spikerbox');
 const { EmgWindow, strengthOf, RestMeter } = require('../src/main/emg');
 const { unwrapReport, buildCommand, deviceKey, pickDevices } = require('../src/main/hid');
+const { Diag, buckets } = require('../src/main/diag');
 
 let passed = 0;
 function test(name, fn) {
@@ -567,6 +568,29 @@ test('포트 역할 키: USB 시리얼번호가 있으면 그걸로(COM 번호�
   assert.strictEqual(a, b);
   assert.strictEqual(a, 'usb:2341:0043:95530');
   assert.strictEqual(roleKeyOf({ vendorId: '1a86', productId: '7523' }, 'COM4'), 'COM4');
+});
+
+test('진단: 파형은 [최소,최대] 칸으로 줄이고, 해상도·끝값 닿음·구간 통계를 낸다', () => {
+  assert.deepStrictEqual(buckets([1, 5, 2, 8, 3, 3], 3), [[1, 5], [2, 8], [3, 3]]);
+  assert.deepStrictEqual(buckets([4, 7], 240), [[4, 4], [7, 7]]);
+  const d = new Diag();
+  let t = 0;
+  // 10비트 기기처럼 512 근처, 1초에 1000 샘플
+  for (let i = 0; i < 20; i++) { t += 100; d.addSamples(Array.from({ length: 100 }, (_, k) => 512 + (k % 2 ? 6 : -6)), t); }
+  d.addSamples([1023], t + 1);
+  d.addWindow({ rms: 6.04, strength: 1.2 });
+  d.addWindow(null);
+  const s = d.snapshot(t + 5);
+  assert.strictEqual(s.bits, 10);
+  assert.strictEqual(s.clip, 1);
+  assert.strictEqual(s.win.last, 1023);
+  assert.deepStrictEqual([s.range.min, s.range.max], [506, 1023]);
+  assert.ok(s.rate >= 900 && s.rate <= 1100, s.rate);
+  assert.ok(s.scope.length <= 240 && s.scope.length > 0);
+  assert.deepStrictEqual(s.history, [[6, 1.2], null]);
+  assert.strictEqual(s.lastAgo, 4);
+  d.reset();
+  assert.strictEqual(d.snapshot(t).range.min, null);
 });
 
 console.log(`\n${passed}개 통과`);

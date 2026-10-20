@@ -18,5 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
   zeroEmg: () => ipcRenderer.invoke('emg:zero'),
   setPortRole: (path, role) => ipcRenderer.invoke('serial:setRole', path, role),
+  setDiag: (on) => ipcRenderer.invoke('diag:set', on),
+  resetDiag: () => ipcRenderer.invoke('diag:reset'),
   quit: () => ipcRenderer.invoke('app:quit'),
 });
