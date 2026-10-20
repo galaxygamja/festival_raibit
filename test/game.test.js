@@ -16,6 +16,7 @@ const { Simulator } = require('../src/main/sim');
 
 const { SpikerBoxParser, parseMessageText, encodeFrames, encodeMessage } = require('../src/main/spikerbox');
 const { EmgWindow, strengthOf, RestMeter } = require('../src/main/emg');
+const { unwrapReport, buildCommand } = require('../src/main/hid');
 
 let passed = 0;
 function test(name, fn) {
@@ -423,6 +424,40 @@ test('기록 전체 삭제: 빈 목록으로 저장하고 지우기 전 파일�
   const empty = new Store(fs.mkdtempSync(path.join(os.tmpdir(), 'punch-')));
   empty.resetRecords(1);
   assert.deepStrictEqual(empty.loadRecords(), []);
+});
+
+test('HID: 62바이트씩 나뉜 리포트의 payload 를 파서에 넣으면 메시지와 프레임이 나온다 (Windows report ID 0 포함)', () => {
+  const bytes = Buffer.concat([encodeMessage('HWT:MUSCLESB;'), encodeFrames(Array.from({ length: 40 }, (_, i) => [600 + i, 500 + i]))]);
+  for (const winId of [false, true]) {
+    const p = new SpikerBoxParser();
+    const frames = [];
+    let hwt = null;
+    for (let i = 0; i < bytes.length; i += 62) {
+      const chunk = bytes.subarray(i, i + 62);
+      const report = Buffer.alloc(64);
+      report[0] = 0x3f;
+      report[1] = chunk.length;
+      chunk.copy(report, 2);
+      const raw = winId ? Buffer.concat([Buffer.from([0]), report]) : report;
+      const out = p.push(unwrapReport(raw));
+      frames.push(...out.frames);
+      for (const m of out.messages) if (m.type === 'HWT') hwt = m.value;
+    }
+    assert.strictEqual(hwt, 'MUSCLESB');
+    assert.strictEqual(p.channels, 2);
+    assert.deepStrictEqual(frames[frames.length - 1], [639, 539]);
+  }
+  assert.strictEqual(unwrapReport(Buffer.from([0x40, 1, 2])), null);
+  const bad = Buffer.alloc(64); bad[0] = 0x3f; bad[1] = 63;
+  assert.strictEqual(unwrapReport(bad), null);
+});
+
+test('HID: 명령은 [0x3F,0x3E,텍스트,0] 64바이트', () => {
+  const c = buildCommand('board:;\n');
+  assert.strictEqual(c.length, 64);
+  assert.deepStrictEqual([...c.subarray(0, 2)], [0x3f, 0x3e]);
+  assert.strictEqual(c.subarray(2, 10).toString(), 'board:;\n');
+  assert.ok(c.subarray(10).every((b) => b === 0));
 });
 
 console.log(`\n${passed}개 통과`);

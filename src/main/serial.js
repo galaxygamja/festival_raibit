@@ -4,11 +4,13 @@
 //   1) settings.portRoles[path] 가 있으면 그 역할로 바로 연다.
 //   2) 없으면 SpikerBox 탐색: 222222 → 500000 baud 로 열고 `b:;` 를 보낸 뒤 1초간 파서에 넣어 본다.
 //   3) 둘 다 아니면 9600 baud 텍스트 포트(START 아두이노: `START`, `ALIVE`).
+// SpikerBox Pro 처럼 시리얼이 아니라 USB HID 로 붙는 장치(벤더 0x2E73)는 hid.js 로 열고 같은 파서에 넣는다.
 // 역할이 정해진 포트는 끊길 때까지 다시 탐색하지 않는다.
 
 const { EventEmitter } = require('events');
 const { SerialPort, ReadlineParser } = require('serialport');
 const { SpikerBoxParser, DEVICES } = require('./spikerbox');
+const hid = require('./hid');
 
 const TEXT_BAUD = 9600;
 const SPIKER_BAUDS = [222222, 500000];
@@ -97,7 +99,7 @@ class SerialManager extends EventEmitter {
 
   /** 관리자 화면의 "포트 다시 연결" (시뮬레이션 가상 포트는 그대로 둔다) */
   reconnect() {
-    for (const [path, e] of [...this.entries]) if (e.port) this.drop(path);
+    for (const [path, e] of [...this.entries]) if (e.port || e.hid) this.drop(path);
     setTimeout(() => this.scan(), 500);
   }
 
@@ -116,6 +118,10 @@ class SerialManager extends EventEmitter {
         const p = normalizePath(info.path);
         if (shouldSkip(info, p) || this.entries.has(p)) continue;
         this.openNew(p);
+      }
+      for (const info of hid.listDevices()) {
+        const p = 'hid:' + info.path;
+        if (!this.entries.has(p)) this.openHid(p, info);
       }
     } catch (err) {
       console.error('[serial] 포트 목록 실패:', err.message);
@@ -144,6 +150,22 @@ class SerialManager extends EventEmitter {
     e.closed = true;
     clearInterval(e.hwtTimer);
     closeAsync(e.port);
+    if (e.hid) e.hid.close();
+  }
+
+  openHid(path, info) {
+    const e = this.newEntry(path, 'spikerbox', false);
+    e.mode = 'spikerbox';
+    e.transport = 'hid';
+    e.name = info.product || null;
+    try {
+      e.hid = hid.openDevice(info, { onData: (buf) => this.onBytes(e, buf), onClose: () => this.drop(path) });
+      console.log('[serial] SpikerBox (HID):', info.product || path);
+    } catch (err) {
+      // 다른 프로그램(Spike Recorder 등)이 쓰는 중이거나 권한 없음. 다음 검색 때 다시 시도한다.
+      console.error('[serial] HID 열기 실패:', err.message);
+      this.drop(path);
+    }
   }
 
   async openNew(path) {
@@ -323,10 +345,10 @@ class SerialManager extends EventEmitter {
         ? {
           connected: now - spiker.lastFrameAt < SPIKER_ALIVE_MS,
           path: spiker.path, hwt: spiker.hwt, name: spiker.name,
-          channels: spiker.parser.channels, baud: spiker.baud,
+          channels: spiker.parser.channels, baud: spiker.baud, transport: spiker.hid ? 'hid' : 'serial',
           fps: now - spiker.lastFrameAt < SPIKER_ALIVE_MS ? spiker.fps : 0,
         }
-        : { connected: false, path: null, hwt: null, name: null, channels: null, baud: 0, fps: 0 },
+        : { connected: false, path: null, hwt: null, name: null, channels: null, baud: 0, transport: null, fps: 0 },
       start: start
         ? {
           connected: now - Math.max(start.lastAliveAt, start.lastStartAt) < START_ALIVE_MS,

@@ -12,6 +12,7 @@ const MAX_CHANNELS = 6;
 const DEVICES = {
   MUSCLESS: { name: 'Muscle SpikerShield', needsConf: true },
   MUSCUSB1: { name: 'Muscle SpikerBox', needsConf: true },
+  MUSCLESB: { name: 'Muscle SpikerBox Pro (HID)', needsConf: false },
   MSBPCDC: { name: 'Muscle SpikerBox Pro', needsConf: false },
   HUMANSB: { name: 'Human SpikerBox', needsConf: false },
   UNIBOX: { name: 'Uni box', needsConf: false },

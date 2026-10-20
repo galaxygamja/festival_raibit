@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current status: v2.1.0
+## Current status: v2.2.0
 
 The v1→v2 migration (2-player Arduino contest → 1-player record mode fed by a SpikerBox) is code-complete and documented in `PLAN.md` (Phases 1–4 and checklist steps 1–10 done). **Only step 11, the on-site hardware test, remains**: real SpikerBox/EMG, macOS 222222 baud, calibration default, START Arduino, Windows exe. Update PLAN.md first if that testing changes a decision.
 
@@ -43,6 +43,7 @@ Electron app, two processes, no bundler. UI is fixed at 1440×900 design pixels 
 - **Main process** (`src/main/`) owns all state and timing. `main.js` wires everything. It ticks the game every 50 ms and pushes a single `payload` (`game, hall, ports, settings, sim, platform, fullscreen, ...`) to the renderer only when it changed. The renderer holds no authoritative state.
 - `serial.js` opens every USB serial port, rescans every 2 s, and skips non-USB ports (Bluetooth etc.). It never routes by port name.
   - Each new port is first probed as a SpikerBox: 222222 then 500000 baud, sending `b:;` and looking for an `HWT` message or ≥20 frames with ≥90% channel-vote confidence. If both fail, the port opens as a 9600 text port (`START`, `ALIVE`). Port roles can also be fixed by hand in the admin screen (`settings.portRoles`).
+- `hid.js` is the USB **HID** transport for SpikerBox Pro (vendor `0x2E73`, HWT `MUSCLESB`, 10-bit values around 512, 2 channels, 10 kHz; verified on real hardware over USB-C, no serial port appears). Reports are 64 bytes `[0x3F, len, payload…]` (payload goes to `SpikerBoxParser`); commands are `[0x3F,0x3E,text,0-pad]` (`?:; max:; board:; start:;`, `h:;` on close). `serial.js` scans HID devices in the same loop and keys them as `hid:<path>`. `node-hid` is in `asarUnpack`.
 - `spikerbox.js` parses the SpikerBox stream. A frame-start byte has bit 0x80 set, and the value is `((b0&0x7F)<<7)|(b1&0x7F)` per channel. Messages sit between escape markers `FF FF 01 01 80 FF` … `FF FF 01 01 81 FF` as `type:value;`. `emg.js` turns samples into the 100 ms score. Both are pure and testable, and PLAN.md §1–2 has the details.
 - `game.js` is a pure state machine (IDLE → MEASURING → RESULT) that takes `now` as an argument so tests can drive the clock. The calibration factor is applied per sample in `toScore`.
 - `sim.js` replaces the hardware: it emits a fake SpikerBox byte stream, so it exercises the real parser and RMS path. For demos it uses the 14-bit range (center 8192) and picks a random strength per `A` press, so scores land around 4000–7500 at calibration 1 and the level gauges light up.

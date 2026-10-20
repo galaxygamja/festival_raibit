@@ -1,7 +1,7 @@
 {
   "name": "raibit-scoreboard",
   "productName": "raibitScoreboard",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "raibitScoreboard - 근전도 기록 측정",
   "main": "src/main/main.js",
   "private": true,
@@ -22,7 +22,8 @@
       "package.json"
     ],
     "asarUnpack": [
-      "node_modules/@serialport/bindings-cpp/**"
+      "node_modules/@serialport/bindings-cpp/**",
+      "node_modules/node-hid/**"
     ],
     "win": {
       "target": [
@@ -42,6 +43,7 @@
     }
   },
   "dependencies": {
+    "node-hid": "^3.4.0",
     "serialport": "^12.0.0"
   },
   "devDependencies": {
