@@ -96,6 +96,7 @@ a:hover { color: #FFD27A; }
 #admin select:focus { outline: 2px solid #FFB21E; outline-offset: 2px; }
 
 /* 관리자 3페이지: 설정 */
+#settings [hidden] { display: none !important; }
 #settings { gap: 20px; }
 #settings ::-webkit-scrollbar { width: 8px; }
 #settings ::-webkit-scrollbar-thumb { background: #4A2E28; border-radius: 4px; }
