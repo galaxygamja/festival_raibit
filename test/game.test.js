@@ -19,7 +19,7 @@ const { Simulator } = require('../src/main/sim');
 
 const { SpikerBoxParser, parseMessageText, encodeFrames, encodeMessage } = require('../src/main/spikerbox');
 const { EmgWindow, EmgFilter, strengthOf, RestMeter } = require('../src/main/emg');
-const { unwrapReport, buildCommand, deviceKey, pickDevices } = require('../src/main/hid');
+const { unwrapReport, buildCommand, deviceKey, pickDevices, HidDecoder, INIT_COMMANDS, defaultRate } = require('../src/main/hid');
 const { Diag, buckets } = require('../src/main/diag');
 const { Recorder, HEADER } = require('../src/main/recorder');
 
@@ -601,10 +601,11 @@ test('기록 전체 삭제: 빈 목록으로 저장하고 지우기 전 파일�
   assert.deepStrictEqual(empty.loadRecords(), []);
 });
 
-test('HID: 62바이트씩 나뉜 리포트의 payload 를 파서에 넣으면 메시지와 프레임이 나온다 (Windows report ID 0 포함)', () => {
-  const bytes = Buffer.concat([encodeMessage('HWT:MUSCLESB;'), encodeFrames(Array.from({ length: 40 }, (_, i) => [600 + i, 500 + i]))]);
+test('HID: 62바이트씩 나뉜 리포트의 payload 를 디코더에 넣으면 메시지와 프레임이 나온다 (Windows report ID 0 포함)', () => {
+  // 마지막 프레임은 다음 시작 바이트가 와야 확정된다 (emg.py 와 같음)
+  const bytes = Buffer.concat([encodeMessage('HWT:MUSCLESB;'), encodeFrames(Array.from({ length: 41 }, (_, i) => [600 + i, 500 + i]))]);
   for (const winId of [false, true]) {
-    const p = new SpikerBoxParser();
+    const p = new HidDecoder();
     const frames = [];
     let hwt = null;
     for (let i = 0; i < bytes.length; i += 62) {
@@ -625,6 +626,56 @@ test('HID: 62바이트씩 나뉜 리포트의 payload 를 파서에 넣으면 �
   assert.strictEqual(unwrapReport(Buffer.from([0x40, 1, 2])), null);
   const bad = Buffer.alloc(64); bad[0] = 0x3f; bad[1] = 63;
   assert.strictEqual(unwrapReport(bad), null);
+});
+
+/** payload 를 디코더에 넣고 프레임·메시지를 모은다 */
+function decodeAll(dec, payloads) {
+  const out = { frames: [], messages: [] };
+  payloads.forEach((p) => { const r = dec.push(p); out.frames.push(...r.frames); out.messages.push(...r.messages); });
+  return out;
+}
+
+test('HID 디코더 (emg.py 규칙): 1023 넘는 값·길이가 틀린 프레임은 버리고 개수를 센다', () => {
+  const d = new HidDecoder();
+  const bytes = Buffer.concat([
+    encodeFrames([[512, 512], [2000, 512], [513, 511]]),
+    Buffer.from([0x82, 1, 2]), // 3바이트짜리 깨진 프레임
+    encodeFrames([[514, 510], [515, 509]]),
+  ]);
+  const r = decodeAll(d, [bytes]);
+  assert.deepStrictEqual(r.frames, [[512, 512], [513, 511], [514, 510]]);
+  assert.strictEqual(d.badFrames, 2);
+  assert.strictEqual(d.goodFrames, 3);
+});
+
+test('HID 디코더: 64바이트 넘는 기기 메시지도 샘플로 새지 않고, 1바이트씩 넣어도 결과가 같다', () => {
+  const long = 'INFO:' + 'x'.repeat(200) + ';MSF:10000;';
+  const bytes = Buffer.concat([encodeFrames([[600, 512], [601, 512]]), encodeMessage(long), encodeFrames([[602, 512], [603, 512], [604, 512]])]);
+  const whole = decodeAll(new HidDecoder(), [bytes]);
+  const single = decodeAll(new HidDecoder(), [...bytes].map((b) => Buffer.from([b])));
+  assert.deepStrictEqual(whole, single);
+  assert.deepStrictEqual(whole.frames, [[600, 512], [601, 512], [602, 512], [603, 512]]);
+  assert.deepStrictEqual(whole.messages.map((m) => m.type), ['INFO', 'MSF']);
+});
+
+test('HID 디코더: 채널 수는 BRD 로 정하고(기본 2), 깨진 리포트는 진행 중이던 프레임을 버린다', () => {
+  const d = new HidDecoder();
+  assert.strictEqual(d.channels, 2);
+  let r = decodeAll(d, [Buffer.concat([encodeMessage('BRD:4;'), encodeFrames([[1, 2, 3], [4, 5, 6], [7, 8, 9]])])]);
+  assert.strictEqual(d.channels, 3);
+  assert.deepStrictEqual(r.frames, [[1, 2, 3], [4, 5, 6]]);
+  assert.strictEqual(defaultRate(d.channels), 5000);
+  assert.strictEqual(defaultRate(2), 10000);
+  const d2 = new HidDecoder();
+  d2.push(encodeFrames([[512, 512]]).subarray(0, 3)); // 프레임 중간에서
+  d2.badReport(); // 리포트가 깨지면
+  r = decodeAll(d2, [encodeFrames([[1, 1], [600, 600], [512, 512]])]); // 남은 1바이트가 다음 프레임에 붙지 않는다
+  assert.deepStrictEqual(r.frames, [[1, 1], [600, 600]]);
+  assert.strictEqual(d2.badReports, 1);
+});
+
+test('HID: 시작 명령은 emg.py 와 같이 start → board, 그 뒤에 기기 정보 질의', () => {
+  assert.deepStrictEqual(INIT_COMMANDS, ['start:;\n', 'board:;\n', '?:;\n', 'max:;\n']);
 });
 
 test('HID: 명령은 [0x3F,0x3E,텍스트,0] 64바이트', () => {
@@ -690,6 +741,23 @@ test('HID: 다른 USB 포트에 다시 꽂아 경로가 바뀌면 옛 연결은 
   api.devices = null;
   m.scanHid(t);
   assert.deepStrictEqual([...m.entries.keys()], ['hid:p2']);
+});
+
+test('HID 연결은 emg.py 디코더를 쓰고, 샘플레이트를 모르면 2채널 10 kHz 로 필터에 넘긴다', () => {
+  const api = fakeHid();
+  const m = new SerialManager({ hidApi: api, now: () => 0 });
+  api.devices = [{ vendorId: 0x2e73, productId: 1, path: 'p1' }];
+  m.scanHid(0);
+  const d = api.opened[0];
+  const got = [];
+  m.on('emg', (values, rate) => got.push({ n: values.length, rate, bad: values.some((v) => v > 1023) }));
+  d.cb.onData(encodeFrames([[600, 512], [5000, 512], [601, 512], [602, 512]]));
+  d.cb.onBadReport();
+  const e = m.entries.get('hid:p1');
+  assert.ok(e.parser instanceof HidDecoder);
+  assert.deepStrictEqual(got, [{ n: 2, rate: 10000, bad: false }]); // 1023 넘는 프레임은 빠지고, 마지막 프레임은 아직 대기
+  assert.strictEqual(e.parser.badFrames, 1);
+  assert.strictEqual(e.parser.badReports, 1);
 });
 
 test('HID: 2초간 신호가 없으면 start 를 다시 보내고, 그래도 없으면 닫았다가 다시 연다', () => {

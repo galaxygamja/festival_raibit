@@ -1,16 +1,146 @@
 'use strict';
 
 // SpikerBox Pro 는 시리얼이 아니라 USB HID 로 연결된다 (벤더 0x2E73).
-// 리포트는 64바이트: [0x3F, 길이, payload...]. payload 는 시리얼과 같은 바이트 스트림이라 SpikerBoxParser 에 그대로 넣는다.
-// 명령은 [0x3F, 0x3E, 명령 텍스트, 0 패딩] 64바이트로 보낸다.
+// 리포트는 64바이트: [0x3F, 길이, payload...]. 명령은 [0x3F, 0x3E, 명령 텍스트, 0 패딩] 64바이트로 보낸다.
+// 시작 명령과 payload 해석(HidDecoder)은 실기기에서 값이 정확히 읽히는 것을 확인한 사용자의 emg.py 와 같게 한다.
+
+const { parseMessageText } = require('./spikerbox');
 
 const BYB_VID = 0x2e73;
 const REPORT_SIZE = 64;
 const REPORT_MARK = 0x3f;
 const WRITE_MARK = 0x3e;
 const MAX_PAYLOAD = 62;
-const INIT_COMMANDS = ['?:;\n', 'max:;\n', 'board:;\n', 'start:;\n'];
+// emg.py 와 같이 start → board 로 수집을 시작하고, 관리자 화면의 기기 정보(HWT·MSF)를 위해 질의 두 개를 뒤에 붙인다.
+// 실기기(2026-10-20): 이 순서도 초당 약 10,100 프레임, 디코딩 결과는 emg.py 와 같았다.
+const INIT_COMMANDS = ['start:;\n', 'board:;\n', '?:;\n', 'max:;\n'];
 const STOP_COMMAND = 'h:;\n';
+
+const ESC_BEGIN = [0xff, 0xff, 0x01, 0x01, 0x80, 0xff];
+const ESC_END = [0xff, 0xff, 0x01, 0x01, 0x81, 0xff];
+const MAX_MESSAGE = 1024;
+const ADC_MAX = 1023; // SpikerBox Pro 는 10비트
+const MAX_FRAME_BYTES = 8;
+
+function isPrefixOf(marker, pending) {
+  if (pending.length > marker.length) return false;
+  for (let i = 0; i < pending.length; i++) if (pending[i] !== marker[i]) return false;
+  return true;
+}
+
+/**
+ * HID payload → 프레임·메시지 (emg.py Decoder 와 같은 규칙).
+ *  - 채널 수는 BRD 메시지로 정한다(기본 2, 확장보드 1 → 4, 4·5 → 3). 통계로 추측하지 않는다.
+ *  - 프레임은 다음 시작 바이트(0x80)가 왔을 때 길이가 정확히 2×채널이고 값이 모두 1023 이하일 때만 확정한다.
+ *  - 이스케이프 구간(기기 메시지)은 1024바이트까지 받는다. 그 안의 바이트는 절대 샘플로 보지 않는다.
+ */
+class HidDecoder {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this._pending = [];
+    this._message = null;
+    this._frame = [];
+    this._channels = 2;
+    this.goodFrames = 0;
+    this.badFrames = 0;
+    this.badReports = 0;
+  }
+
+  get channels() {
+    return this._channels;
+  }
+
+  /** 받은 프레임 중 정상 비율 (진단 화면용) */
+  get confidence() {
+    const total = this.goodFrames + this.badFrames;
+    return total ? this.goodFrames / total : 0;
+  }
+
+  /** 형식이 깨진 리포트: emg.py 처럼 이어 붙이지 않고 진행 중이던 프레임·메시지를 버린다 */
+  badReport() {
+    this.badReports++;
+    this._frame = [];
+    this._pending = [];
+    this._message = null;
+  }
+
+  push(payload) {
+    const out = { frames: [], messages: [] };
+    for (let k = 0; k < payload.length; k++) {
+      this._pending.push(payload[k] & 0xff);
+      const marker = this._message !== null ? ESC_END : ESC_BEGIN;
+      while (this._pending.length && !isPrefixOf(marker, this._pending)) {
+        const b = this._pending.shift();
+        if (this._message === null) {
+          this._sampleByte(b, out.frames);
+        } else {
+          this._message.push(b);
+          if (this._message.length > MAX_MESSAGE) {
+            // emg.py 는 여기서 멈춘다. 앱은 계속 돌아야 하므로 그 메시지만 버리고 처음부터 다시 찾는다.
+            this.badReport();
+          }
+        }
+      }
+      if (this._pending.length === marker.length) {
+        this._pending = [];
+        if (this._message === null) {
+          this._message = [];
+        } else {
+          this._endMessage(out.messages);
+        }
+      }
+    }
+    return out;
+  }
+
+  _endMessage(messages) {
+    const text = String.fromCharCode.apply(null, this._message);
+    this._message = null;
+    parseMessageText(text).forEach((m) => {
+      messages.push(m);
+      if (m.type === 'BRD') {
+        // 확장보드는 프레임 폭을 바꾼다. 다음 시작 표시부터 새 폭으로 읽는다.
+        this._frame = [];
+        const b = m.value.charAt(0);
+        this._channels = b === '1' ? 4 : b === '4' || b === '5' ? 3 : 2;
+      }
+    });
+  }
+
+  _sampleByte(b, frames) {
+    if (b & 0x80) {
+      if (this._frame.length) {
+        if (this._frame.length === 2 * this._channels) {
+          const vals = [];
+          for (let i = 0; i < this._frame.length; i += 2) vals.push(((this._frame[i] & 0x7f) << 7) | this._frame[i + 1]);
+          if (vals.every((v) => v <= ADC_MAX)) {
+            frames.push(vals);
+            this.goodFrames++;
+          } else {
+            this.badFrames++;
+          }
+        } else {
+          this.badFrames++;
+        }
+      }
+      this._frame = [b];
+    } else if (this._frame.length) {
+      this._frame.push(b);
+      if (this._frame.length > MAX_FRAME_BYTES) {
+        this.badFrames++;
+        this._frame = [];
+      }
+    }
+  }
+}
+
+/** 장치가 샘플레이트(MSF)를 알려 주지 않을 때: 2채널 10 kHz, 확장보드(3~4채널) 5 kHz (emg.py 와 같음) */
+function defaultRate(channels) {
+  return channels > 2 ? 5000 : 10000;
+}
 
 /** 수신 리포트 → payload Buffer (형식이 맞지 않으면 null). Windows 는 앞에 report ID 0 이 붙을 수 있다. */
 function unwrapReport(data) {
@@ -69,8 +199,8 @@ function listDevices() {
   }
 }
 
-/** 장치를 열고 초기화 명령을 보낸다. onData(Buffer payload), onClose() 를 받는다. */
-function openDevice(info, { onData, onClose }) {
+/** 장치를 열고 초기화 명령을 보낸다. onData(Buffer payload), onBadReport(), onClose() 를 받는다. */
+function openDevice(info, { onData, onBadReport, onClose }) {
   const HID = require('node-hid');
   const dev = new HID.HID(info.path);
   let closed = false;
@@ -83,7 +213,11 @@ function openDevice(info, { onData, onClose }) {
   };
   dev.on('data', (d) => {
     const payload = unwrapReport(d);
-    if (payload && payload.length) onData(payload);
+    if (!payload) {
+      if (onBadReport) onBadReport();
+      return;
+    }
+    if (payload.length) onData(payload);
   });
   dev.on('error', fail);
   const send = (text) => {
@@ -104,4 +238,4 @@ function openDevice(info, { onData, onClose }) {
   };
 }
 
-module.exports = { BYB_VID, INIT_COMMANDS, unwrapReport, buildCommand, deviceKey, pickDevices, listDevices, openDevice };
+module.exports = { BYB_VID, INIT_COMMANDS, HidDecoder, defaultRate, unwrapReport, buildCommand, deviceKey, pickDevices, listDevices, openDevice };
