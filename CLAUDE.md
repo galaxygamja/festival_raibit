@@ -55,7 +55,7 @@ Electron app, two processes, no bundler. UI is fixed at 1440×900 design pixels 
 
 ## Reference code
 
-- This app lives on the **`scoreboard` branch** of https://github.com/dohye0508/Spike-Recorder (`origin`). The old `galaxygamja/festival_raibit` repo (remote `old`) is no longer used. Work and push on `scoreboard`; never push to `master` or other branches there.
+- Two remotes: `origin` = https://github.com/dohye0508/Spike-Recorder (this app on its `scoreboard` branch; never push to `master` or other branches there) and `old` = https://github.com/galaxygamja/festival_raibit, whose `main` was fast-forwarded to the current `scoreboard` (2.1.1) so the app can live without the huge Spike Recorder source. Which one is canonical going forward is the user's call; push only where asked.
 - That repo's `master` is a fork of Backyard Brains' Spike Recorder (C++/SDL), with only the README translated relative to upstream. It is a reference for the SpikerBox protocol only: `src/engine/ArduinoSerial.cpp` (frame parser around line 1950, sample rates by device in `setSampleRateAndNumberOfChannelsBasedOnType`, `HWT` names around line 2590, commands around line 2910). Do not vendor or build it.
 - Spike Recorder and this app cannot hold the same serial port at once.
 
@@ -71,4 +71,4 @@ Electron app, two processes, no bundler. UI is fixed at 1440×900 design pixels 
 - The banner text is fixed at 980 px with `nowrap` because it previously wrapped the last Korean character onto a second line.
 - `design/` and `design/claude-code-prompt.md` are the **initial** spec. The behavior above (immediate result, max score, Ctrl+D, app name, and v2's single player and SpikerBox) supersedes them. PLAN.md is the v2 migration plan; where it differs from this file (screen layout, `hall-of-fame.json`/`score-history.json`, which `records.json` replaced in v2.1.0), this file wins.
 - Non-standard baud 222222 on macOS through node `serialport` is unverified (PLAN.md §9).
-- Not yet verified: real SpikerBox/EMG hardware, the START Arduino, running the exe on real Windows, the fullscreen/window toggle in a live run.
+- Real SpikerBox Pro (HID, `MUSCLESB`) opens and streams in dev and packaged builds, but it is 10-bit (rest ≈ 512) while `--sim` is 14-bit, so the default calibration 1.0 is untuned for real scores. Not yet verified: scoring with a real EMG sensor, the START Arduino, running the exe on real Windows, the fullscreen/window toggle in a live run.
