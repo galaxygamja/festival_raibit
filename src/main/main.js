@@ -15,6 +15,7 @@ const START_SIM = argv.includes('--sim');
 // 시작 화면: --windowed / --fullscreen 이 있으면 그걸 따르고, 없으면 마지막으로 고른 방식(settings.fullscreen)
 const FORCE_WINDOWED = argv.includes('--windowed');
 const FORCE_FULLSCREEN = argv.includes('--fullscreen');
+const IS_MAC = process.platform === 'darwin';
 
 if (!app.requestSingleInstanceLock()) {
   // 두 개가 뜨면 시리얼 포트를 서로 뺏으므로 하나만 실행
@@ -109,7 +110,7 @@ function push(force) {
 }
 
 function isFullscreen() {
-  return !!win && !win.isDestroyed() && (win.isKiosk() || win.isFullScreen());
+  return !!win && !win.isDestroyed() && (win.isKiosk() || win.isFullScreen() || (IS_MAC && win.isSimpleFullScreen()));
 }
 
 function saveSettings() {
@@ -122,14 +123,23 @@ function saveSettings() {
 }
 
 /** 전체화면(kiosk) ↔ 창 모드. 고른 방식은 다음 실행 때도 유지된다. */
-function setFullscreen(on) {
-  if (!win || win.isDestroyed()) return;
-  if (on) {
+// macOS 에서는 setKiosk 가 창 크기를 바꾸지 않는 경우가 있어(상태만 kiosk) 즉시 덮는 simple fullscreen 을 쓴다.
+function applyFullscreen(on) {
+  if (IS_MAC) {
+    if (!on && win.isFullScreen()) win.setFullScreen(false); // 초록 버튼으로 들어간 전체화면
+    if (win.isKiosk()) win.setKiosk(false);
+    win.setSimpleFullScreen(!!on);
+  } else if (on) {
     win.setKiosk(true);
   } else {
     win.setKiosk(false);
     win.setFullScreen(false);
   }
+}
+
+function setFullscreen(on) {
+  if (!win || win.isDestroyed()) return;
+  applyFullscreen(on);
   settings = { ...settings, fullscreen: !!on };
   saveSettings();
   push();
@@ -143,8 +153,8 @@ function createWindow(full) {
     minHeight: 450,
     center: true,
     backgroundColor: '#140A09',
-    kiosk: full,
-    fullscreen: full,
+    kiosk: full && !IS_MAC,
+    fullscreen: full && !IS_MAC,
     autoHideMenuBar: true,
     show: false,
     title: 'raibitScoreboard',
@@ -155,7 +165,10 @@ function createWindow(full) {
       sandbox: true,
     },
   });
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    win.show();
+    if (full && IS_MAC) { win.setSimpleFullScreen(true); push(); }
+  });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.webContents.on('did-finish-load', () => push(true));
   // macOS 초록 버튼 등으로 바뀐 경우도 화면에 반영

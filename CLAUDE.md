@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current status: v2.1.4
+## Current status: v2.1.5
 
 The v1→v2 migration (2-player Arduino contest → 1-player record mode fed by a SpikerBox) is code-complete and documented in `PLAN.md` (Phases 1–4 and checklist steps 1–10 done). **Only step 11, the on-site hardware test, remains**: real SpikerBox/EMG, macOS 222222 baud, calibration default, START Arduino, Windows exe. Update PLAN.md first if that testing changes a decision.
 
@@ -71,5 +71,6 @@ Electron app, two processes, no bundler. UI is fixed at 1440×900 design pixels 
 - The renderer rebuilds admin rows whenever the records change. `renderAdminRows` preserves what the user is typing (per record id and field), so keep that when changing it.
 - The banner text is fixed at 980 px with `nowrap` because it previously wrapped the last Korean character onto a second line.
 - `design/` and `design/claude-code-prompt.md` are the **initial** spec. The behavior above (immediate result, max score, Ctrl+D, app name, and v2's single player and SpikerBox) supersedes them. PLAN.md is the v2 migration plan; where it differs from this file (screen layout, `hall-of-fame.json`/`score-history.json`, which `records.json` replaced in v2.1.0), this file wins.
+- On macOS the fullscreen toggle uses `setSimpleFullScreen` (instant, no Spaces animation), because `setKiosk(true)` left the window at its windowed size while `isKiosk()` reported true. Windows still uses kiosk.
 - Non-standard baud 222222 on macOS through node `serialport` is unverified (PLAN.md §9).
 - Real SpikerBox Pro (HID, `MUSCLESB`) opens and streams in dev and packaged builds, but it is 10-bit (rest ≈ 512) while `--sim` is 14-bit, so the default calibration 1.0 is untuned for real scores. Not yet verified: scoring with a real EMG sensor, the START Arduino, running the exe on real Windows, the fullscreen/window toggle in a live run.
