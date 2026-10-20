@@ -106,14 +106,14 @@
             <h2 style="margin: 0; font-size: 24px; font-weight: 400; flex-grow: 1">원시 파형 · 최근 1초</h2>
             <div id="d-scope-range" style="font-size: 17px; color: #B8A29B"></div>
           </div>
-          <canvas id="d-scope" width="1040" height="280" style="width: 520px; height: 140px; border-radius: 10px; background: #120807"></canvas>
+          <canvas id="d-scope" width="1040" height="160" style="width: 520px; height: 80px; border-radius: 10px; background: #120807"></canvas>
         </div>
         <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px; min-height: 0">
           <div style="display: flex; align-items: baseline; gap: 12px">
-            <h2 style="margin: 0; font-size: 24px; font-weight: 400; flex-grow: 1">100 ms 세기 · 최근 10초</h2>
-            <div style="font-size: 17px"><span style="color: #FFB21E">■ RMS</span> <span style="color: #FF6A45">■ 세기(휴식 뺀 값)</span></div>
+            <h2 style="margin: 0; font-size: 24px; font-weight: 400; flex-grow: 1">100 ms 세기 · 최근 30초</h2>
+            <div style="font-size: 17px"><span style="color: #FFB21E">■ RMS</span> <span style="color: #FF6A45">━ 세기(휴식 뺀 값)</span></div>
           </div>
-          <canvas id="d-hist" width="1040" height="180" style="width: 520px; height: 90px; border-radius: 10px; background: #120807"></canvas>
+          <canvas id="d-hist" width="1040" height="320" style="width: 520px; height: 160px; border-radius: 10px; background: #120807"></canvas>
         </div>
         <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1">
           <div style="display: flex; align-items: center; gap: 12px">
@@ -126,6 +126,22 @@
       </div>
 
       <div class="diag-col" style="display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto">
+        <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: none">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <h2 style="margin: 0; font-size: 24px; font-weight: 400; flex-grow: 1; white-space: nowrap">녹화</h2>
+            <button type="button" id="btn-rec" style="height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer; white-space: nowrap; color: #FFB21E; border-color: #FFB21E">● 녹화 시작</button>
+            <button type="button" id="btn-rec-open" style="height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer; white-space: nowrap">폴더 열기</button>
+          </div>
+          <div style="font-size: 16px; color: #B8A29B">지금 하는 동작 표시 (숫자키 0~4)</div>
+          <div id="rec-labels" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px">
+            <button type="button" data-label="" style="height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer; white-space: nowrap; padding: 0">0 없음</button>
+            <button type="button" data-label="쉼" style="height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer; white-space: nowrap; padding: 0">1 쉼</button>
+            <button type="button" data-label="약하게" style="height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer; white-space: nowrap; padding: 0">2 약하게</button>
+            <button type="button" data-label="중간" style="height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer; white-space: nowrap; padding: 0">3 중간</button>
+            <button type="button" data-label="최대" style="height: 34px; padding: 0 12px; border-radius: 9px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 17px; cursor: pointer; white-space: nowrap; padding: 0">4 최대</button>
+          </div>
+          <div id="d-rec"></div>
+        </div>
         <div style="box-sizing: border-box; padding: 14px 20px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: none">
           <h2 style="margin: 0; font-size: 24px; font-weight: 400">SpikerBox</h2>
           <div id="d-spiker"></div>

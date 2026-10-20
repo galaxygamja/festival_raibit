@@ -18,6 +18,7 @@ const { SpikerBoxParser, parseMessageText, encodeFrames, encodeMessage } = requi
 const { EmgWindow, strengthOf, RestMeter } = require('../src/main/emg');
 const { unwrapReport, buildCommand, deviceKey, pickDevices } = require('../src/main/hid');
 const { Diag, buckets } = require('../src/main/diag');
+const { Recorder, HEADER } = require('../src/main/recorder');
 
 let passed = 0;
 function test(name, fn) {
@@ -578,7 +579,7 @@ test('진단: 파형은 [최소,최대] 칸으로 줄이고, 해상도·끝값 �
   // 10비트 기기처럼 512 근처, 1초에 1000 샘플
   for (let i = 0; i < 20; i++) { t += 100; d.addSamples(Array.from({ length: 100 }, (_, k) => 512 + (k % 2 ? 6 : -6)), t); }
   d.addSamples([1023], t + 1);
-  d.addWindow({ rms: 6.04, strength: 1.2 });
+  d.addWindow({ rms: 6.04, strength: 1.2 }, '최대');
   d.addWindow(null);
   const s = d.snapshot(t + 5);
   assert.strictEqual(s.bits, 10);
@@ -587,10 +588,43 @@ test('진단: 파형은 [최소,최대] 칸으로 줄이고, 해상도·끝값 �
   assert.deepStrictEqual([s.range.min, s.range.max], [506, 1023]);
   assert.ok(s.rate >= 900 && s.rate <= 1100, s.rate);
   assert.ok(s.scope.length <= 240 && s.scope.length > 0);
-  assert.deepStrictEqual(s.history, [[6, 1.2], null]);
+  assert.deepStrictEqual(s.history, [[6, 1.2, '최대'], null]);
   assert.strictEqual(s.lastAgo, 4);
   d.reset();
   assert.strictEqual(d.snapshot(t).range.min, null);
+});
+
+test('녹화: 100 ms 구간마다 CSV 한 줄, 원시값은 .raw 에 이어 쓰고 raw_start 로 맞춘다', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rec-'));
+  const r = new Recorder({ dir });
+  r.addSamples([1, 2]); // 녹화 전에는 무시
+  r.start(1000, { version: '9.9.9' });
+  assert.ok(r.on);
+  r.setLabel('최대');
+  r.addSamples([510, 514]);
+  r.addSamples([512]);
+  r.addWindow({ rms: 1.634, strength: 0.5 }, { restRms: 1.1, calibration: 2, score: 1, phase: 'idle' }, 1100);
+  r.setLabel('없는 표시');
+  r.addWindow(null, { restRms: 1.1, calibration: 2, phase: 'idle' }, 1200);
+  r.addSamples([500]);
+  r.addWindow({ rms: 0, strength: 0 }, { restRms: 1.1, calibration: 2, score: 0, phase: 'measuring' }, 1300);
+  const st = r.status(1300);
+  assert.strictEqual(st.rows, 3);
+  assert.deepStrictEqual(st.labelCounts, { 최대: 1 });
+  r.stop();
+  assert.ok(!r.on);
+  r.addWindow({ rms: 1, strength: 1 }, {}, 1400); // 멈춘 뒤에는 무시
+  const csv = fs.readFileSync(r.lastFile, 'utf8').split('\n');
+  assert.ok(csv[0].startsWith('# version: "9.9.9"'));
+  const rows = csv.slice(csv.indexOf(HEADER) + 1).filter(Boolean);
+  assert.deepStrictEqual(rows, [
+    '100,최대,1.63,0.5,1.1,2,1,512,510,514,3,0,idle',
+    '200,,,,1.1,2,,,,,0,3,idle',
+    '300,,0,0,1.1,2,0,500,500,500,1,3,measuring',
+  ]);
+  const raw = fs.readFileSync(r.lastFile.replace(/\.csv$/, '.raw'));
+  assert.deepStrictEqual([0, 1, 2, 3].map((i) => raw.readInt16LE(i * 2)), [510, 514, 512, 500]);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 console.log(`\n${passed}개 통과`);

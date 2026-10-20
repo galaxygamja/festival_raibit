@@ -432,21 +432,61 @@
     $('d-scope-range').textContent = '세로 ' + fmt(y0) + ' ~ ' + fmt(y1) + ' · 평균선 ' + fmt(sig.sec.mean, 1);
   }
 
+  var LABEL_COLORS = { '쉼': '#5AA9E6', '약하게': '#7BE08A', '중간': '#FFB21E', '최대': '#FF5A47' };
+  var HIST_N = 300; // 100 ms × 300 = 30초
+
   function drawHist(sig) {
     var c = $('d-hist'), g = c.getContext('2d'), W = c.width, H = c.height;
     g.clearRect(0, 0, W, H);
-    var h = sig.history || [], top = 10;
+    var h = sig.history || [], top = 10, STRIP = 18, PH = H - STRIP - 4;
     h.forEach(function (p) { if (p && p[0] > top) top = p[0]; });
     top *= 1.1;
-    var n = 100, bw = W / n;
-    var off = n - h.length;
+    var bw = W / HIST_N, off = HIST_N - h.length;
+    var yOf = function (v) { return PH - (v / top) * PH; };
+    // 5초 눈금 (오른쪽 끝이 지금)
+    g.strokeStyle = '#2E1B17'; g.lineWidth = 2;
+    for (var k = 1; k < 6; k++) { var gx = W - k * 50 * bw; g.beginPath(); g.moveTo(gx, 0); g.lineTo(gx, PH); g.stroke(); }
     h.forEach(function (p, i) {
       var x = (off + i) * bw;
-      if (!p) { g.fillStyle = '#2E1B17'; g.fillRect(x, 0, bw - 2, H); return; }
-      g.fillStyle = 'rgba(255,178,30,0.55)'; g.fillRect(x, H - (p[0] / top) * H, bw - 2, (p[0] / top) * H);
-      g.fillStyle = '#FF6A45'; g.fillRect(x + bw * 0.25, H - (p[1] / top) * H, bw * 0.5 - 1, (p[1] / top) * H);
+      if (!p) { g.fillStyle = '#3A2420'; g.fillRect(x, 0, bw, PH); return; }
+      g.fillStyle = 'rgba(255,178,30,0.55)'; g.fillRect(x, yOf(p[0]), bw + 0.5, PH - yOf(p[0]));
+      if (p[2] && LABEL_COLORS[p[2]]) { g.fillStyle = LABEL_COLORS[p[2]]; g.fillRect(x, H - STRIP, bw + 0.5, STRIP); }
     });
-    g.fillStyle = DIM; g.font = '22px sans-serif'; g.fillText('최대 ' + fmt(top, 1), 10, 26);
+    g.strokeStyle = '#FF6A45'; g.lineWidth = 3; g.beginPath();
+    var pen = false;
+    h.forEach(function (p, i) {
+      if (!p) { pen = false; return; }
+      var x = (off + i) * bw + bw / 2;
+      if (pen) g.lineTo(x, yOf(p[1])); else { g.moveTo(x, yOf(p[1])); pen = true; }
+    });
+    g.stroke();
+    g.fillStyle = DIM; g.font = '24px sans-serif';
+    g.fillText('최대 ' + fmt(top / 1.1, 1), 10, 28);
+    var last = h.length ? h[h.length - 1] : null;
+    if (last) { g.textAlign = 'right'; g.fillText('지금 RMS ' + fmt(last[0], 1) + ' · 세기 ' + fmt(last[1], 1), W - 10, 28); g.textAlign = 'left'; }
+    g.fillText('-30초', 6, PH - 8);
+  }
+
+  function renderRec() {
+    var r = state.rec || {};
+    var btn = $('btn-rec');
+    btn.textContent = r.on ? '■ 녹화 중지' : '● 녹화 시작';
+    btn.style.color = btn.style.borderColor = r.on ? '#FF5A47' : '#FFB21E';
+    Array.prototype.forEach.call($('rec-labels').children, function (b) {
+      var on = b.dataset.label === (r.label || '');
+      var col = LABEL_COLORS[b.dataset.label] || '#F3E6E1';
+      b.style.background = on ? col : 'transparent';
+      b.style.color = on ? '#140A09' : '#F3E6E1';
+      b.style.borderColor = on ? col : '#5A3A33';
+    });
+    var counts = Object.keys(r.labelCounts || {}).map(function (k) { return k + ' ' + (r.labelCounts[k] / 10).toFixed(1) + '초'; }).join(' · ');
+    $('d-rec').innerHTML = kv([
+      ['상태', r.on ? '녹화 중 · ' + dur(r.elapsed) : '꺼짐', r.on ? BAD : null],
+      ['구간 (0.1초)', r.on ? r.rows.toLocaleString() + '개' : null],
+      ['표시한 시간', counts || null],
+      ['파일', r.on ? r.file : r.lastFile ? r.lastFile + ' (저장됨)' : null, !r.on && r.lastFile ? GOOD : null],
+      ['오류', r.error, r.error ? BAD : null],
+    ]) + '<div style="font-size: 13px; color: #8E7770; overflow-wrap: anywhere">' + esc(r.dir || '') + '</div>';
   }
 
   function renderDiag() {
@@ -457,6 +497,7 @@
     var emg = state.emg || {}, set = state.settings || {}, cal = set.calibration || 1;
     drawScope(sig);
     drawHist(sig);
+    renderRec();
 
     var score = Math.min(MAX_SCORE, Math.round((emg.strength || 0) * cal));
     var top = sig.bits ? Math.pow(2, sig.bits) - 1 : null;
@@ -652,6 +693,12 @@
   $('btn-page1').addEventListener('click', function () { showPage(1); });
   $('btn-diag-reset').addEventListener('click', function () { api.resetDiag(); });
   $('btn-zero2').addEventListener('click', function () { api.zeroEmg(); });
+  $('btn-rec').addEventListener('click', function () { if (state && state.rec && state.rec.on) api.recStop(); else api.recStart(); });
+  $('btn-rec-open').addEventListener('click', function () { api.openRecordings(); });
+  $('rec-labels').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button[data-label]') : null;
+    if (b) { api.recLabel(b.dataset.label); b.blur(); }
+  });
   $('btn-reconnect2').addEventListener('click', function () { api.reconnect(); });
   $('btn-fullscreen').addEventListener('click', function () { api.toggleFullscreen(); });
   $('btn-start').addEventListener('click', function () { api.start(); });
@@ -713,7 +760,13 @@
       return;
     }
     if (adminOpen) {
-      if (e.key === 'Escape') { e.preventDefault(); closeAdmin(); }
+      if (e.key === 'Escape') { e.preventDefault(); closeAdmin(); return; }
+      // 진단 페이지: 숫자키 0~4 로 지금 하는 동작 표시 (녹화 CSV 와 그래프 아래 띠에 남는다)
+      var m = adminPage === 2 && !e.ctrlKey && !e.metaKey && !e.altKey && /^(Digit|Numpad)([0-4])$/.exec(e.code);
+      if (m && !e.repeat && !(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) {
+        e.preventDefault();
+        api.recLabel(['', '쉼', '약하게', '중간', '최대'][+m[2]]);
+      }
       return;
     }
     if (!state || !state.sim || e.ctrlKey || e.altKey || e.metaKey) return;

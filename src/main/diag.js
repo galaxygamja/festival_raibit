@@ -3,7 +3,7 @@
 // 관리자 2페이지(진단)용 신호 기록. 원시값을 링 버퍼에 모아 두었다가, 화면이 볼 때만 파형·통계로 줄여서 내보낸다.
 
 const RING = 20000; // 10 kHz 기준 2초
-const HISTORY = 100; // 100 ms 구간 × 100 = 10초
+const HISTORY = 300; // 100 ms 구간 × 300 = 30초
 const SCOPE_BUCKETS = 240;
 
 class Diag {
@@ -44,9 +44,9 @@ class Diag {
     }
   }
 
-  /** 100 ms 구간 하나의 결과 (끊김이면 null 로 빈칸) */
-  addWindow(w) {
-    this._history.push(w ? [round1(w.rms), round1(w.strength)] : null);
+  /** 100 ms 구간 하나의 결과 (끊김이면 null 로 빈칸). label 은 녹화 표시(쉼/최대 등) */
+  addWindow(w, label = '') {
+    this._history.push(w ? [round1(w.rms), round1(w.strength), label] : null);
     if (this._history.length > HISTORY) this._history.shift();
   }
 

@@ -1,14 +1,15 @@
 'use strict';
 
 const path = require('path');
-const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker } = require('electron');
-const { Game } = require('./game');
+const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell } = require('electron');
+const { Game, toScore } = require('./game');
 const hall = require('./hall');
 const { Store, normalizeSettings } = require('./store');
 const { SerialManager } = require('./serial');
 const { EmgWindow, RestMeter, strengthOf } = require('./emg');
 const { Simulator } = require('./sim');
 const { Diag } = require('./diag');
+const { Recorder } = require('./recorder');
 
 const argv = process.argv.slice(1);
 const START_SIM = argv.includes('--sim');
@@ -30,6 +31,7 @@ let live = { raw: null, rms: 0, strength: 0 };
 let lastRaw = null; // 선택 채널의 마지막 원시값 (관리자 화면 확인용)
 const diag = new Diag();
 let diagOn = false; // 관리자 2페이지가 열려 있을 때만 진단 정보를 payload 에 싣는다
+let recorder = null; // 관리자 2페이지 녹화 (userData/recordings)
 const startedAt = Date.now();
 
 // 최근 로그를 진단 화면에서 보이게 모아 둔다
@@ -85,6 +87,7 @@ function payload() {
     dataDir: store.dir,
     version: app.getVersion(),
     diag: diagOn ? diagPayload(t) : null,
+    rec: recorder.status(t),
   };
 }
 
@@ -231,6 +234,21 @@ function setupIpc() {
   });
   ipcMain.handle('diag:set', (_e, on) => { diagOn = !!on; push(); });
   ipcMain.handle('diag:reset', () => { diag.reset(); push(); });
+  ipcMain.handle('rec:start', () => {
+    const sb = serial.status(now()).spikerbox || {};
+    recorder.start(now(), {
+      started: new Date().toISOString(), version: app.getVersion(), platform: process.platform,
+      device: { name: sb.name || null, hwt: sb.hwt || null, transport: sb.transport || null, channels: sb.channels || null },
+      sim: sim.enabled, channel: settings.emg.channel, calibration: settings.calibration, restRms: settings.emg.restRms, windowMs: EMG_WINDOW_MS,
+    });
+    push();
+  });
+  ipcMain.handle('rec:stop', () => { recorder.stop(); push(); });
+  ipcMain.handle('rec:label', (_e, label) => { recorder.setLabel(label); push(); });
+  ipcMain.handle('rec:open', () => {
+    if (recorder.lastFile && !recorder.on) shell.showItemInFolder(recorder.lastFile);
+    else { require('fs').mkdirSync(recorder.dir, { recursive: true }); shell.openPath(recorder.dir); }
+  });
   ipcMain.handle('emg:zero', () => { rest.start(now()); zeroStartedAt = now(); push(); });
   ipcMain.handle('serial:setRole', (_e, p, role) => {
     if (typeof p !== 'string' || !['auto', 'spikerbox', 'start'].includes(role)) return false;
@@ -268,6 +286,7 @@ function setupIpc() {
 app.whenReady().then(() => {
   store = new Store(app.getPath('userData'));
   settings = store.loadSettings();
+  recorder = new Recorder({ dir: path.join(store.dir, 'recordings') });
   const saved = store.loadRecords();
   if (saved) {
     records = hall.normalizeRecords(saved);
@@ -292,6 +311,7 @@ app.whenReady().then(() => {
     emgWin.add(values);
     lastRaw = values[values.length - 1];
     diag.addSamples(values, now());
+    recorder.addSamples(values);
   });
   serial.on('start', () => { if (game.start(now())) lastResult = null; push(); });
 
@@ -310,11 +330,15 @@ app.whenReady().then(() => {
     if (!w) {
       live = { raw: null, rms: 0, strength: 0 }; // SpikerBox 끊김: 이 구간은 건너뛴다
       diag.addWindow(null);
+      recorder.addWindow(null, { restRms: settings.emg.restRms, calibration: settings.calibration, phase: game.phase }, t);
       if (rest.running && t - zeroStartedAt > ZERO_TIMEOUT_MS) rest.stop();
       return;
     }
     live = { raw: lastRaw, rms: w.rms, strength: strengthOf(w.rms, settings.emg.restRms) };
-    diag.addWindow(live);
+    diag.addWindow(live, recorder.label);
+    recorder.addWindow(live, {
+      restRms: settings.emg.restRms, calibration: settings.calibration, score: toScore(live.strength, settings.calibration), phase: game.phase,
+    }, t);
     if (rest.running && rest.add(w.rms, t)) {
       settings = normalizeSettings({ ...settings, emg: { ...settings.emg, restRms: rest.result() } });
       saveSettings();
@@ -335,5 +359,6 @@ app.on('second-instance', () => {
 
 app.on('window-all-closed', () => {
   if (serial) serial.stopAll();
+  if (recorder) recorder.stop();
   app.quit();
 });

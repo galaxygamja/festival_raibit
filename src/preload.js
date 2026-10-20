@@ -20,5 +20,9 @@ contextBridge.exposeInMainWorld('api', {
   setPortRole: (path, role) => ipcRenderer.invoke('serial:setRole', path, role),
   setDiag: (on) => ipcRenderer.invoke('diag:set', on),
   resetDiag: () => ipcRenderer.invoke('diag:reset'),
+  recStart: () => ipcRenderer.invoke('rec:start'),
+  recStop: () => ipcRenderer.invoke('rec:stop'),
+  recLabel: (label) => ipcRenderer.invoke('rec:label', label),
+  openRecordings: () => ipcRenderer.invoke('rec:open'),
   quit: () => ipcRenderer.invoke('app:quit'),
 });
