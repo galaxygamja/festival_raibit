@@ -24,7 +24,8 @@ let win = null;
 let store, settings, records, hallTop = [], recordsRev = 0, lastResult = null, game, serial, sim;
 const emgWin = new EmgWindow();
 const rest = new RestMeter(3000);
-let live = { rms: 0, strength: 0 };
+let live = { raw: null, rms: 0, strength: 0 };
+let lastRaw = null; // 선택 채널의 마지막 원시값 (관리자 화면 확인용)
 let zeroStartedAt = 0;
 const EMG_WINDOW_MS = 100;
 const ZERO_TIMEOUT_MS = 10000;
@@ -59,7 +60,7 @@ function payload() {
     recordsRev, // 전체 기록은 크기가 커서 payload 에 싣지 않고, 관리자 화면이 records:get 으로 받아 간다
     recordsTotal: records.length,
     ports: serial.status(t),
-    emg: { rms: Math.round(live.rms * 10) / 10, strength: Math.round(live.strength * 10) / 10, restRms: settings.emg.restRms, zeroing: rest.running },
+    emg: { raw: live.raw, rms: Math.round(live.rms * 10) / 10, strength: Math.round(live.strength * 10) / 10, restRms: settings.emg.restRms, zeroing: rest.running },
     settings,
     sim: sim.enabled,
     platform: process.platform,
@@ -189,8 +190,12 @@ function setupIpc() {
   ipcMain.handle('emg:zero', () => { rest.start(now()); zeroStartedAt = now(); push(); });
   ipcMain.handle('serial:setRole', (_e, p, role) => {
     if (typeof p !== 'string' || !['auto', 'spikerbox', 'start'].includes(role)) return false;
+    // USB 시리얼번호가 있는 포트는 그 키로 저장해서 COM 번호·경로가 바뀌어도 역할이 따라가게 한다
+    const key = serial.roleKeyOf(p);
     const roles = { ...settings.portRoles };
-    if (role === 'auto') delete roles[p]; else roles[p] = role;
+    delete roles[p];
+    delete roles[key];
+    if (role !== 'auto') roles[key] = role;
     settings = normalizeSettings({ ...settings, portRoles: roles });
     saveSettings();
     serial.reopen(p);
@@ -239,7 +244,10 @@ app.whenReady().then(() => {
   });
 
   serial = new SerialManager({ getSettings: () => settings });
-  serial.on('emg', (values) => emgWin.add(values));
+  serial.on('emg', (values) => {
+    emgWin.add(values);
+    lastRaw = values[values.length - 1];
+  });
   serial.on('start', () => { if (game.start(now())) lastResult = null; push(); });
 
   sim = new Simulator((buf) => serial.feedSpikerBox(SIM_PORT, buf));
@@ -255,11 +263,11 @@ app.whenReady().then(() => {
     const w = emgWin.take();
     const t = now();
     if (!w) {
-      live = { rms: 0, strength: 0 }; // SpikerBox 끊김: 이 구간은 건너뛴다
+      live = { raw: null, rms: 0, strength: 0 }; // SpikerBox 끊김: 이 구간은 건너뛴다
       if (rest.running && t - zeroStartedAt > ZERO_TIMEOUT_MS) rest.stop();
       return;
     }
-    live = { rms: w.rms, strength: strengthOf(w.rms, settings.emg.restRms) };
+    live = { raw: lastRaw, rms: w.rms, strength: strengthOf(w.rms, settings.emg.restRms) };
     if (rest.running && rest.add(w.rms, t)) {
       settings = normalizeSettings({ ...settings, emg: { ...settings.emg, restRms: rest.result() } });
       saveSettings();

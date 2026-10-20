@@ -295,12 +295,14 @@
     var ps = state.ports || {}, sb = ps.spikerbox || {}, st = ps.start || {}, open = ps.open || [];
     var emg = state.emg || {};
     // 포트·연결 정보가 바뀔 때만 다시 그린다
-    var key = JSON.stringify([sb, st, open.length]);
+    var key = JSON.stringify([sb, st, open.length, ps.openError]);
     if (key !== renderedPortsKey) {
       renderedPortsKey = key;
       var sbDetail = sb.connected || sb.path
         ? [sb.path, sb.hwt, sb.channels ? sb.channels + '채널' : '', sb.fps ? sb.fps + ' fps' : ''].filter(Boolean).join(' · ')
-        : '신호 없음 · 열린 포트 ' + open.length + '개';
+        : ps.openError
+          ? '열기 실패 · Spike Recorder 등 다른 프로그램이 쓰는 중인지 확인 (' + ps.openError + ')'
+          : '신호 없음 · 열린 포트 ' + open.length + '개';
       var bar = '<div style="margin: 6px 0 2px 24px; height: 8px; border-radius: 4px; background: #2E1B17; overflow: hidden"><div id="rms-bar" style="height: 100%; width: 0; background: ' + AMBER + '; box-shadow: 0 0 8px ' + AMBER + '"></div></div>';
       var stDetail = st.connected || st.path
         ? [st.path, '마지막 START ' + timeText(st.lastStartAt)].filter(Boolean).join(' · ')
@@ -329,7 +331,8 @@
     var zeroing = !!emg.zeroing;
     $('btn-zero').disabled = zeroing;
     $('btn-zero').textContent = zeroing ? '재는 중…' : '영점 잡기';
-    $('rest-text').textContent = '휴식 ' + (emg.restRms != null ? emg.restRms : (state.settings.emg || {}).restRms || 0).toFixed(1);
+    $('rest-text').textContent = '휴식 ' + (emg.restRms != null ? emg.restRms : (state.settings.emg || {}).restRms || 0).toFixed(1) +
+      (emg.raw != null ? ' · 원시 ' + emg.raw + ' · RMS ' + (emg.rms || 0).toFixed(1) : '');
   }
 
   function fillSettingsInputs() {

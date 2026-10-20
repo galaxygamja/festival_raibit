@@ -11,12 +11,12 @@ const hall = require('../src/main/hall');
 const { Store, normalizeSettings } = require('../src/main/store');
 
 // serial.js 는 serialport 를 불러오므로 parseLine 만 따로 검사
-const { parseLine, classifyProbe } = require('../src/main/serial');
+const { SerialManager, parseLine, classifyProbe, roleKeyOf, retryDelay } = require('../src/main/serial');
 const { Simulator } = require('../src/main/sim');
 
 const { SpikerBoxParser, parseMessageText, encodeFrames, encodeMessage } = require('../src/main/spikerbox');
 const { EmgWindow, strengthOf, RestMeter } = require('../src/main/emg');
-const { unwrapReport, buildCommand } = require('../src/main/hid');
+const { unwrapReport, buildCommand, deviceKey, pickDevices } = require('../src/main/hid');
 
 let passed = 0;
 function test(name, fn) {
@@ -458,6 +458,115 @@ test('HID: 명령은 [0x3F,0x3E,텍스트,0] 64바이트', () => {
   assert.deepStrictEqual([...c.subarray(0, 2)], [0x3f, 0x3e]);
   assert.strictEqual(c.subarray(2, 10).toString(), 'board:;\n');
   assert.ok(c.subarray(10).every((b) => b === 0));
+});
+
+test('HID: 제품 ID 는 가리지 않고, 기기 하나에 항목이 여럿이면 벤더 usagePage(0xFF00) 하나만 연다', () => {
+  const devs = pickDevices([
+    { vendorId: 0x2e73, productId: 1, path: 'a-kbd', serialNumber: 'S1', usagePage: 0x01 },
+    { vendorId: 0x2e73, productId: 1, path: 'a-vendor', serialNumber: 'S1', usagePage: 0xff00 },
+    { vendorId: 0x2e73, productId: 2, path: 'b', usagePage: 0xff00 },
+    { vendorId: 0x1234, productId: 1, path: 'mouse' },
+    { vendorId: 0x2e73, productId: 1 },
+  ]);
+  assert.deepStrictEqual(devs.map((d) => d.path).sort(), ['a-vendor', 'b']);
+  // 시리얼번호가 있으면 경로가 바뀌어도 같은 키
+  assert.strictEqual(deviceKey({ vendorId: 0x2e73, productId: 1, serialNumber: 'S1', path: 'x' }), deviceKey({ vendorId: 0x2e73, productId: 1, serialNumber: 'S1', path: 'y' }));
+  assert.strictEqual(deviceKey({ vendorId: 0x2e73, productId: 1, path: 'x' }), 'hid:x');
+});
+
+function fakeHid() {
+  const api = {
+    devices: [],
+    opened: [],
+    fail: false,
+    listDevices: () => api.devices,
+    deviceKey,
+    openDevice(info, cb) {
+      if (api.fail) throw new Error('busy');
+      const d = { info, cb, restarts: 0, closed: false, restart() { d.restarts++; }, close() { d.closed = true; } };
+      api.opened.push(d);
+      return d;
+    },
+  };
+  return api;
+}
+const hidFrames = (n) => encodeFrames(Array.from({ length: n }, () => [516, 512]));
+
+test('HID: 다른 USB 포트에 다시 꽂아 경로가 바뀌면 옛 연결은 닫고 새 경로로 연다', () => {
+  const api = fakeHid();
+  let t = 1000;
+  const m = new SerialManager({ hidApi: api, now: () => t });
+  const got = [];
+  m.on('emg', (v) => got.push(...v));
+  api.devices = [{ vendorId: 0x2e73, productId: 1, path: 'p1', serialNumber: 'S1' }];
+  m.scanHid(t);
+  assert.strictEqual(api.opened.length, 1);
+  api.opened[0].cb.onData(hidFrames(40));
+  assert.ok(m.status(t).spikerbox.connected);
+  assert.strictEqual(got[0], 516);
+  // 뽑았다가 다른 포트에 꽂음 (오류 이벤트 없이 경로만 바뀌는 경우)
+  api.devices = [{ vendorId: 0x2e73, productId: 1, path: 'p2', serialNumber: 'S1' }];
+  t += 2000;
+  m.scanHid(t);
+  assert.ok(api.opened[0].closed);
+  assert.strictEqual(api.opened.length, 2);
+  assert.deepStrictEqual([...m.entries.keys()], ['hid:p2']);
+  // 목록을 못 읽은 경우(null)에는 열린 연결을 건드리지 않는다
+  api.devices = null;
+  m.scanHid(t);
+  assert.deepStrictEqual([...m.entries.keys()], ['hid:p2']);
+});
+
+test('HID: 2초간 신호가 없으면 start 를 다시 보내고, 그래도 없으면 닫았다가 다시 연다', () => {
+  const api = fakeHid();
+  let t = 0;
+  const m = new SerialManager({ hidApi: api, now: () => t });
+  api.devices = [{ vendorId: 0x2e73, productId: 1, path: 'p1' }];
+  m.scanHid(t);
+  const d = api.opened[0];
+  d.cb.onData(hidFrames(40));
+  t = 1500; m.scanHid(t);
+  assert.strictEqual(d.restarts, 0);
+  t = 3000; m.scanHid(t);
+  assert.strictEqual(d.restarts, 1);
+  d.cb.onData(hidFrames(40)); // 다시 들어오면 정상
+  t = 4000; m.scanHid(t);
+  assert.ok(!d.closed);
+  t = 6000; m.scanHid(t);
+  assert.strictEqual(d.restarts, 2);
+  t = 9000; m.scanHid(t); // start 후 3초가 지나도 신호 없음 → 닫고 같은 검색에서 다시 연다
+  assert.ok(d.closed);
+  assert.strictEqual(api.opened.length, 2);
+});
+
+test('HID: 열기에 계속 실패하면 재시도 간격을 2초 → 최대 10초로 늘리고 관리자 화면에 이유를 보인다', () => {
+  assert.deepStrictEqual([1, 2, 3, 4, 9].map(retryDelay), [2000, 4000, 8000, 10000, 10000]);
+  const api = fakeHid();
+  let t = 0;
+  let tries = 0;
+  const open = api.openDevice;
+  api.openDevice = (info, cb) => { tries++; return open(info, cb); };
+  api.fail = true;
+  const m = new SerialManager({ hidApi: api, now: () => t });
+  api.devices = [{ vendorId: 0x2e73, productId: 1, path: 'p1' }];
+  for (t = 0; t <= 20000; t += 2000) m.scanHid(t);
+  // 0, 2, 6, 14 초에 시도 (간격 2 → 4 → 8 → 10)
+  assert.strictEqual(tries, 4);
+  assert.strictEqual(m.status(t).openError, 'busy');
+  // 다시 열리면 오류 표시가 사라지고 간격도 처음으로
+  api.fail = false;
+  t = 24000; m.scanHid(t);
+  api.opened[0].cb.onData(hidFrames(40));
+  assert.strictEqual(m.status(t).openError, null);
+  assert.strictEqual(m.failures.size, 0);
+});
+
+test('포트 역할 키: USB 시리얼번호가 있으면 그걸로(COM 번호가 바뀌어도 같음), 없으면 경로', () => {
+  const a = roleKeyOf({ vendorId: '2341', productId: '0043', serialNumber: '95530' }, 'COM3');
+  const b = roleKeyOf({ vendorId: '2341', productId: '0043', serialNumber: '95530' }, 'COM5');
+  assert.strictEqual(a, b);
+  assert.strictEqual(a, 'usb:2341:0043:95530');
+  assert.strictEqual(roleKeyOf({ vendorId: '1a86', productId: '7523' }, 'COM4'), 'COM4');
 });
 
 console.log(`\n${passed}개 통과`);

@@ -33,14 +33,39 @@ function buildCommand(text) {
   return out;
 }
 
-/** 연결된 BackyardBrains HID 장치 목록 (node-hid 를 못 불러오면 빈 배열) */
+const VENDOR_USAGE_PAGE = 0xff00;
+
+/** 꽂은 USB 포트가 바뀌어도(경로가 바뀌어도) 같은 기기로 알아보는 키. 시리얼번호가 없으면 경로를 쓴다. */
+function deviceKey(info) {
+  const hex = (n) => (Number(n) || 0).toString(16).padStart(4, '0');
+  return info.serialNumber
+    ? 'hid:' + hex(info.vendorId) + ':' + hex(info.productId) + ':' + info.serialNumber
+    : 'hid:' + info.path;
+}
+
+/**
+ * node-hid 장치 목록 → 열 장치 목록. 벤더 0x2E73 만, 기기 하나에 HID 항목이 여러 개 보이면(Windows) 벤더 전용
+ * usagePage(0xFF00) 항목 하나만 남긴다. 제품 ID 는 가리지 않는다.
+ */
+function pickDevices(list) {
+  const byKey = new Map();
+  (Array.isArray(list) ? list : []).forEach((d) => {
+    if (!d || d.vendorId !== BYB_VID || !d.path) return;
+    const k = deviceKey(d);
+    const cur = byKey.get(k);
+    if (!cur || (cur.usagePage !== VENDOR_USAGE_PAGE && d.usagePage === VENDOR_USAGE_PAGE)) byKey.set(k, d);
+  });
+  return [...byKey.values()];
+}
+
+/** 연결된 BackyardBrains HID 장치 목록. node-hid 를 못 불러오거나 목록을 못 읽으면 null (없는 것과 구분) */
 function listDevices() {
   try {
     const HID = require('node-hid');
-    return HID.devices().filter((d) => d.vendorId === BYB_VID && d.path);
+    return pickDevices(HID.devices());
   } catch (err) {
     console.error('[hid] 장치 목록 실패:', err.message);
-    return [];
+    return null;
   }
 }
 
@@ -68,6 +93,8 @@ function openDevice(info, { onData, onClose }) {
   INIT_COMMANDS.forEach((c, i) => setTimeout(() => send(c), i * 20));
   return {
     send,
+    /** 스트림이 멈췄을 때 다시 시작시킨다 */
+    restart() { send('start:;\n'); },
     close() {
       if (closed) return;
       send(STOP_COMMAND);
@@ -77,4 +104,4 @@ function openDevice(info, { onData, onClose }) {
   };
 }
 
-module.exports = { BYB_VID, INIT_COMMANDS, unwrapReport, buildCommand, listDevices, openDevice };
+module.exports = { BYB_VID, INIT_COMMANDS, unwrapReport, buildCommand, deviceKey, pickDevices, listDevices, openDevice };

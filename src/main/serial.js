@@ -6,6 +6,10 @@
 //   3) 둘 다 아니면 9600 baud 텍스트 포트(START 아두이노: `START`, `ALIVE`).
 // SpikerBox Pro 처럼 시리얼이 아니라 USB HID 로 붙는 장치(벤더 0x2E73)는 hid.js 로 열고 같은 파서에 넣는다.
 // 역할이 정해진 포트는 끊길 때까지 다시 탐색하지 않는다.
+// 포트·USB 자리가 바뀌어도 버티게:
+//   - 손으로 정한 역할은 USB 시리얼번호(있으면)로 저장해서 COM 번호·경로가 바뀌어도 따라간다.
+//   - HID 장치는 검색 때 목록에서 사라졌으면 닫고, 2초 동안 프레임이 없으면 start 를 다시 보내고, 그래도 없으면 다시 연다.
+//   - 열기에 계속 실패하는 포트(다른 프로그램이 쓰는 중 등)는 재시도 간격을 2초 → 최대 10초로 늘린다.
 
 const { EventEmitter } = require('events');
 const { SerialPort, ReadlineParser } = require('serialport');
@@ -22,6 +26,11 @@ const SPIKER_ALIVE_MS = 1000; // 1초 안에 프레임이 왔으면 연결됨
 const START_ALIVE_MS = 3000; // 3초 안에 START/ALIVE 가 왔으면 연결됨
 const PROBE_MIN_FRAMES = 20;
 const PROBE_MIN_CONFIDENCE = 0.9;
+const HID_STALL_MS = 2000; // 이만큼 프레임이 없으면 start 를 다시 보낸다
+const HID_RESTART_WAIT_MS = 3000; // 그 뒤로도 없으면 닫고 다시 연다
+const RETRY_BASE_MS = 2000;
+const RETRY_MAX_MS = 10000;
+const OPEN_ERROR_SHOW_MS = 15000;
 
 /** 'START' / 'ALIVE' 만 인식. 나머지는 null */
 function parseLine(line) {
@@ -47,6 +56,19 @@ const USB_NAME = /usbmodem|usbserial|wchusbserial|SLAB_USBtoUART|ttyACM|ttyUSB/i
 function shouldSkip(info, p) {
   if (/bluetooth|debug-console|wlan/i.test(p)) return true;
   return !info.vendorId && !USB_NAME.test(p);
+}
+
+/** 손으로 정한 역할을 저장할 키: USB 시리얼번호가 있으면 그것(경로가 바뀌어도 같음), 없으면 경로 */
+function roleKeyOf(info, p) {
+  if (info && info.serialNumber && info.vendorId && info.productId) {
+    return 'usb:' + String(info.vendorId).toLowerCase() + ':' + String(info.productId).toLowerCase() + ':' + info.serialNumber;
+  }
+  return p;
+}
+
+/** n 번 연속 실패 뒤 다음 시도까지 기다릴 시간 */
+function retryDelay(fails) {
+  return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, fails - 1));
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -78,12 +100,34 @@ function closeAsync(port) {
 }
 
 class SerialManager extends EventEmitter {
-  constructor({ getSettings } = {}) {
+  constructor({ getSettings, hidApi, listSerial, now } = {}) {
     super();
     this.getSettings = getSettings || (() => ({ emg: { channel: 1 }, portRoles: {} }));
+    this.hid = hidApi || hid; // 테스트에서 가짜 HID 를 넣는다
+    this.listSerial = listSerial || (() => SerialPort.list());
+    this.now = now || Date.now;
     this.entries = new Map(); // path -> entry
+    this.failures = new Map(); // 기기 키 -> { count, nextAt } 열기 실패 재시도 간격
+    this.roleKeys = new Map(); // path -> 역할 저장 키
+    this.openError = null; // { message, at } 마지막 SpikerBox(HID) 열기 실패
     this.timer = null;
     this.scanning = false;
+  }
+
+  /** 관리자 화면에서 역할을 정할 때 저장할 키 */
+  roleKeyOf(path) {
+    return this.roleKeys.get(path) || path;
+  }
+
+  canTry(key, now) {
+    const f = this.failures.get(key);
+    return !f || now >= f.nextAt;
+  }
+
+  failed(key, now) {
+    const count = ((this.failures.get(key) || {}).count || 0) + 1;
+    this.failures.set(key, { count, nextAt: now + retryDelay(count) });
+    return count;
   }
 
   start() {
@@ -100,11 +144,13 @@ class SerialManager extends EventEmitter {
   /** 관리자 화면의 "포트 다시 연결" (시뮬레이션 가상 포트는 그대로 둔다) */
   reconnect() {
     for (const [path, e] of [...this.entries]) if (e.port || e.hid) this.drop(path);
+    this.failures.clear();
     setTimeout(() => this.scan(), 500);
   }
 
   /** 역할을 바꾼 포트를 처음부터 다시 연다 */
   reopen(path) {
+    this.failures.delete(this.roleKeyOf(path));
     this.drop(path);
     setTimeout(() => this.scan(), 300);
   }
@@ -113,20 +159,58 @@ class SerialManager extends EventEmitter {
     if (this.scanning) return;
     this.scanning = true;
     try {
-      const list = await SerialPort.list();
+      const now = this.now();
+      const list = await this.listSerial();
       for (const info of list) {
         const p = normalizePath(info.path);
-        if (shouldSkip(info, p) || this.entries.has(p)) continue;
+        if (shouldSkip(info, p)) continue;
+        const key = roleKeyOf(info, p);
+        this.roleKeys.set(p, key);
+        if (this.entries.has(p) || !this.canTry(key, now)) continue;
         this.openNew(p);
       }
-      for (const info of hid.listDevices()) {
-        const p = 'hid:' + info.path;
-        if (!this.entries.has(p)) this.openHid(p, info);
-      }
+      this.scanHid(now);
     } catch (err) {
       console.error('[serial] 포트 목록 실패:', err.message);
     } finally {
       this.scanning = false;
+    }
+  }
+
+  /** HID 장치: 사라진 것은 닫고, 멈춘 것은 다시 시작시키고, 새로 보이는 것은 연다 */
+  scanHid(now) {
+    const devs = this.hid.listDevices();
+    if (devs) {
+      // 목록을 읽었을 때만 정리한다 (못 읽었으면 지금 열린 것은 그대로 둔다)
+      const present = new Set(devs.map((d) => 'hid:' + d.path));
+      for (const [path, e] of [...this.entries]) {
+        if (e.transport === 'hid' && !present.has(path)) {
+          console.log('[serial] HID 장치가 사라짐:', path);
+          this.drop(path);
+        }
+      }
+    }
+    this.checkHid(now);
+    for (const info of devs || []) {
+      const p = 'hid:' + info.path;
+      if (this.entries.has(p) || !this.canTry(this.hid.deviceKey(info), now)) continue;
+      this.openHid(p, info, now);
+    }
+  }
+
+  /** 열려 있는데 프레임이 안 오는 HID 장치: start 를 다시 보내고, 그래도 안 오면 닫는다 (다음 검색 때 다시 열림) */
+  checkHid(now) {
+    for (const [path, e] of [...this.entries]) {
+      if (e.transport !== 'hid' || !e.hid) continue;
+      if (now - Math.max(e.lastFrameAt, e.openedAt) < HID_STALL_MS) continue;
+      if (!e.restartAt) {
+        e.restartAt = now;
+        console.log('[serial] HID 신호 없음, start 다시 보냄:', path);
+        e.hid.restart();
+      } else if (now - e.restartAt >= HID_RESTART_WAIT_MS) {
+        console.log('[serial] HID 신호 없음, 다시 엶:', path);
+        this.drop(path);
+      }
     }
   }
 
@@ -136,7 +220,7 @@ class SerialManager extends EventEmitter {
       parser: new SpikerBoxParser(), probeMessages: [], probeFrames: 0,
       hwt: null, name: null, hwtTries: 0, hwtTimer: null,
       lastFrameAt: 0, fpsStart: 0, fpsCount: 0, fps: 0,
-      lastAliveAt: 0, lastStartAt: 0,
+      lastAliveAt: 0, lastStartAt: 0, openedAt: 0, restartAt: 0, gotFrames: false,
     };
     this.entries.set(path, e);
     return e;
@@ -153,23 +237,39 @@ class SerialManager extends EventEmitter {
     if (e.hid) e.hid.close();
   }
 
-  openHid(path, info) {
+  openHid(path, info, now = this.now()) {
     const e = this.newEntry(path, 'spikerbox', false);
+    const key = this.hid.deviceKey(info);
+    e.info = info;
     e.mode = 'spikerbox';
     e.transport = 'hid';
     e.name = info.product || null;
+    e.openedAt = now;
+    const failed = (err) => {
+      // 다른 프로그램(Spike Recorder 등)이 쓰는 중이거나 권한 없음. 점점 길게 기다렸다가 다시 시도한다.
+      const n = this.failed(key, this.now());
+      this.openError = { message: err ? err.message : '장치가 바로 닫힘', at: this.now() };
+      console.error('[serial] HID 열기 실패 (' + n + '번째):', this.openError.message);
+    };
     try {
-      e.hid = hid.openDevice(info, { onData: (buf) => this.onBytes(e, buf), onClose: () => this.drop(path) });
+      e.hid = this.hid.openDevice(info, {
+        onData: (buf) => this.onBytes(e, buf),
+        onClose: () => {
+          // 프레임을 한 번도 못 받고 닫혔으면 열기 실패로 친다
+          if (!e.gotFrames && !e.closed) failed(null);
+          this.drop(path);
+        },
+      });
       console.log('[serial] SpikerBox (HID):', info.product || path);
     } catch (err) {
-      // 다른 프로그램(Spike Recorder 등)이 쓰는 중이거나 권한 없음. 다음 검색 때 다시 시도한다.
-      console.error('[serial] HID 열기 실패:', err.message);
+      failed(err);
       this.drop(path);
     }
   }
 
   async openNew(path) {
-    const fixedRole = (this.getSettings().portRoles || {})[path];
+    const roles = this.getSettings().portRoles || {};
+    const fixedRole = roles[this.roleKeyOf(path)] || roles[path];
     const e = this.newEntry(path, fixedRole || 'probing', !!fixedRole);
     try {
       if (fixedRole === 'start') return await this.openText(e);
@@ -187,8 +287,9 @@ class SerialManager extends EventEmitter {
       }
       await this.openText(e);
     } catch (err) {
-      // 다른 프로그램이 쓰는 중이거나 사라진 포트. 다음 검색 때 다시 시도한다.
-      console.error('[serial] 열기 실패:', path, err.message);
+      // 다른 프로그램이 쓰는 중이거나 사라진 포트. 점점 길게 기다렸다가 다시 시도한다.
+      const n = this.failed(this.roleKeyOf(path), this.now());
+      console.error('[serial] 열기 실패 (' + n + '번째):', path, err.message);
       this.drop(path);
     }
   }
@@ -267,7 +368,7 @@ class SerialManager extends EventEmitter {
   handleLine(e, line) {
     const msg = parseLine(line);
     if (!msg) return;
-    const t = Date.now();
+    const t = this.now();
     e.lastAliveAt = t;
     if (msg.type === 'start') {
       e.lastStartAt = t;
@@ -302,8 +403,14 @@ class SerialManager extends EventEmitter {
       return;
     }
     if (!r.frames.length) return;
-    const t = Date.now();
+    const t = this.now();
     e.lastFrameAt = t;
+    e.restartAt = 0;
+    if (!e.gotFrames) {
+      e.gotFrames = true;
+      if (e.transport === 'hid') this.failures.delete(this.hid.deviceKey(e.info || {}));
+      this.openError = null;
+    }
     if (!e.fpsStart) e.fpsStart = t;
     e.fpsCount += r.frames.length;
     if (t - e.fpsStart >= 1000) {
@@ -349,6 +456,7 @@ class SerialManager extends EventEmitter {
           fps: now - spiker.lastFrameAt < SPIKER_ALIVE_MS ? spiker.fps : 0,
         }
         : { connected: false, path: null, hwt: null, name: null, channels: null, baud: 0, transport: null, fps: 0 },
+      openError: this.openError && now - this.openError.at < OPEN_ERROR_SHOW_MS ? this.openError.message : null,
       start: start
         ? {
           connected: now - Math.max(start.lastAliveAt, start.lastStartAt) < START_ALIVE_MS,
@@ -360,4 +468,4 @@ class SerialManager extends EventEmitter {
   }
 }
 
-module.exports = { SerialManager, parseLine, classifyProbe };
+module.exports = { SerialManager, parseLine, classifyProbe, roleKeyOf, retryDelay };
