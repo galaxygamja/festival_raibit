@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current status: v2.2.0
+## Current status: v2.1.1
 
 The v1→v2 migration (2-player Arduino contest → 1-player record mode fed by a SpikerBox) is code-complete and documented in `PLAN.md` (Phases 1–4 and checklist steps 1–10 done). **Only step 11, the on-site hardware test, remains**: real SpikerBox/EMG, macOS 222222 baud, calibration default, START Arduino, Windows exe. Update PLAN.md first if that testing changes a decision.
 
