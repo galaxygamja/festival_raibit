@@ -6,7 +6,7 @@ const { Game, toScore } = require('./game');
 const hall = require('./hall');
 const { Store, normalizeSettings } = require('./store');
 const { SerialManager } = require('./serial');
-const { EmgWindow, RestMeter, strengthOf } = require('./emg');
+const { EmgWindow, EmgFilter, RestMeter, strengthOf } = require('./emg');
 const { Simulator } = require('./sim');
 const { Diag } = require('./diag');
 const { Recorder } = require('./recorder');
@@ -25,9 +25,11 @@ if (!app.requestSingleInstanceLock()) {
 
 let win = null;
 let store, settings, records, hallTop = [], recordsRev = 0, lastResult = null, game, serial, sim;
-const emgWin = new EmgWindow();
+const emgWin = new EmgWindow(); // 거른 신호 (점수용)
+const rawWin = new EmgWindow(); // 거르기 전 신호 (진단 화면 비교용)
+const emgFilter = new EmgFilter();
 const rest = new RestMeter(3000);
-let live = { raw: null, rms: 0, strength: 0 };
+let live = { raw: null, rms: 0, rmsRaw: 0, strength: 0, score: 0 };
 let lastRaw = null; // 선택 채널의 마지막 원시값 (관리자 화면 확인용)
 const diag = new Diag();
 let diagOn = false; // 관리자 2페이지가 열려 있을 때만 진단 정보를 payload 에 싣는다
@@ -78,7 +80,10 @@ function payload() {
     recordsRev, // 전체 기록은 크기가 커서 payload 에 싣지 않고, 관리자 화면이 records:get 으로 받아 간다
     recordsTotal: records.length,
     ports: serial.status(t),
-    emg: { raw: live.raw, rms: Math.round(live.rms * 10) / 10, strength: Math.round(live.strength * 10) / 10, restRms: settings.emg.restRms, zeroing: rest.running },
+    emg: {
+      raw: live.raw, rms: Math.round(live.rms * 10) / 10, rmsRaw: Math.round(live.rmsRaw * 10) / 10, strength: Math.round(live.strength * 10) / 10,
+      score: live.score, restRms: settings.emg.restRms, zeroing: rest.running,
+    },
     settings,
     sim: sim.enabled,
     platform: process.platform,
@@ -239,7 +244,8 @@ function setupIpc() {
     recorder.start(now(), {
       started: new Date().toISOString(), version: app.getVersion(), platform: process.platform,
       device: { name: sb.name || null, hwt: sb.hwt || null, transport: sb.transport || null, channels: sb.channels || null },
-      sim: sim.enabled, channel: settings.emg.channel, calibration: settings.calibration, restRms: settings.emg.restRms, windowMs: EMG_WINDOW_MS,
+      sim: sim.enabled, channel: settings.emg.channel, calibration: settings.calibration, scoreCurve: settings.scoreCurve, restRms: settings.emg.restRms, windowMs: EMG_WINDOW_MS,
+      filter: 'highpass 80Hz x2 + notch 60/180/300/420/540Hz Q4 (rms 열), rms_raw = 거르기 전',
     });
     push();
   });
@@ -307,8 +313,10 @@ app.whenReady().then(() => {
   });
 
   serial = new SerialManager({ getSettings: () => settings });
-  serial.on('emg', (values) => {
-    emgWin.add(values);
+  serial.on('emg', (values, rate) => {
+    emgFilter.setRate(rate);
+    emgWin.add(emgFilter.process(values));
+    rawWin.add(values);
     lastRaw = values[values.length - 1];
     diag.addSamples(values, now());
     recorder.addSamples(values);
@@ -326,18 +334,20 @@ app.whenReady().then(() => {
   // 100 ms 마다: 그 사이 들어온 SpikerBox 샘플을 한 구간 세기로 만들어 게임에 넣는다
   setInterval(() => {
     const w = emgWin.take();
+    const wr = rawWin.take();
     const t = now();
     if (!w) {
-      live = { raw: null, rms: 0, strength: 0 }; // SpikerBox 끊김: 이 구간은 건너뛴다
+      live = { raw: null, rms: 0, rmsRaw: 0, strength: 0, score: 0 }; // SpikerBox 끊김: 이 구간은 건너뛴다
       diag.addWindow(null);
-      recorder.addWindow(null, { restRms: settings.emg.restRms, calibration: settings.calibration, phase: game.phase }, t);
+      recorder.addWindow(null, { restRms: settings.emg.restRms, calibration: settings.calibration, curve: settings.scoreCurve, phase: game.phase }, t);
       if (rest.running && t - zeroStartedAt > ZERO_TIMEOUT_MS) rest.stop();
       return;
     }
-    live = { raw: lastRaw, rms: w.rms, strength: strengthOf(w.rms, settings.emg.restRms) };
+    const strength = strengthOf(w.rms, settings.emg.restRms);
+    live = { raw: lastRaw, rms: w.rms, rmsRaw: wr ? wr.rms : 0, strength, score: toScore(strength, settings.calibration, settings.scoreCurve) };
     diag.addWindow(live, recorder.label);
     recorder.addWindow(live, {
-      restRms: settings.emg.restRms, calibration: settings.calibration, score: toScore(live.strength, settings.calibration), phase: game.phase,
+      restRms: settings.emg.restRms, calibration: settings.calibration, curve: settings.scoreCurve, score: live.score, phase: game.phase,
     }, t);
     if (rest.running && rest.add(w.rms, t)) {
       settings = normalizeSettings({ ...settings, emg: { ...settings.emg, restRms: rest.result() } });

@@ -1,22 +1,23 @@
 'use strict';
 
 // 하드웨어 없이 테스트하는 가짜 SpikerBox. 실제 장치처럼 바이트 스트림(HWT 메시지 + 10 kHz 프레임)을 만들어
-// 실제 파서와 RMS 경로를 그대로 거친다. A 키를 누르는 동안 진폭이 서서히 올라가고, 떼면 내려간다.
-// 시연용으로 14비트 범위(중심 8192)를 써서 보정계수 1에서도 점수가 수천 점대가 되어 게이지가 켜진다.
-// 누를 때마다 목표 세기를 무작위로 골라 기록이 매번 다르게 나온다.
+// 실제 파서와 필터·RMS 경로를 그대로 거친다. A 키를 누르는 동안 근육 신호(넓은 대역 잡음)가 서서히 커지고, 떼면 줄어든다.
+// 크기는 실제 녹화(2026-10-20, SpikerBox Pro)에 맞췄다: 10비트(중심 512), 60 Hz 전원 잡음, 거른 뒤 쉼 RMS ≈ 2, 힘 RMS 15~45.
+// 누를 때마다 목표 세기를 무작위로 골라 기록이 매번 다르게 나온다 (기본 보정에서 약 4000~8000점).
 
 const { encodeFrames, encodeMessage } = require('./spikerbox');
 
 const TICK_MS = 10;
 const SAMPLES_PER_TICK = 100; // 10 kHz
 const SAMPLE_RATE = 10000;
-const SINE_HZ = 80;
-const CENTER = 8192;
-const MAX_RAW = 16383;
-const REST_AMP = 40;
-const HELD_AMP_MIN = 4000;
-const HELD_AMP_MAX = 11000;
-const SHAPE = Math.tanh(2.5); // 사인을 각지게 만들어 RMS 를 키운다
+const CENTER = 512;
+const MAX_RAW = 1023;
+const HUM_HZ = 60;
+const HUM_AMP = 20; // 거르기 전 쉼 RMS ≈ 14 (실제 녹화와 비슷)
+const NOISE_RMS_PER_AMP = 1 / Math.sqrt(3); // 균일 잡음 [-1, 1] 의 RMS
+const REST_RMS = 2;
+const HELD_RMS_MIN = 15;
+const HELD_RMS_MAX = 45;
 const FOLLOW = 0.06; // 틱마다 목표를 따라가는 비율
 
 class Simulator {
@@ -26,9 +27,9 @@ class Simulator {
     this.enabled = false;
     this.held = { a: false };
     this.timer = null;
-    this.amp = REST_AMP;
-    this.target = HELD_AMP_MAX;
-    this.n = 0; // 지금까지 만든 샘플 수 (사인 위상 유지)
+    this.amp = REST_RMS;
+    this.target = HELD_RMS_MAX;
+    this.n = 0; // 지금까지 만든 샘플 수 (전원 잡음 위상 유지)
   }
 
   setEnabled(on) {
@@ -47,7 +48,7 @@ class Simulator {
 
   key(k, down) {
     if (!(k in this.held)) return;
-    if (k === 'a' && down && !this.held.a) this.target = HELD_AMP_MIN + Math.random() * (HELD_AMP_MAX - HELD_AMP_MIN);
+    if (k === 'a' && down && !this.held.a) this.target = HELD_RMS_MIN + Math.random() * (HELD_RMS_MAX - HELD_RMS_MIN);
     this.held[k] = !!down;
   }
 
@@ -57,12 +58,12 @@ class Simulator {
 
   /** 10 ms 분량(100샘플)을 만들어 넘긴다 */
   tick() {
-    this.amp += ((this.held.a ? this.target : REST_AMP) - this.amp) * FOLLOW;
+    // amp = 근육 신호 RMS
+    this.amp += ((this.held.a ? this.target : REST_RMS) - this.amp) * FOLLOW;
     const frames = [];
     for (let i = 0; i < SAMPLES_PER_TICK; i++) {
-      const phase = (2 * Math.PI * SINE_HZ * this.n++) / SAMPLE_RATE;
-      const noise = (Math.random() * 2 - 1) * 0.25;
-      const v = CENTER + this.amp * (Math.tanh(2.5 * Math.sin(phase)) / SHAPE + noise);
+      const hum = HUM_AMP * Math.sin((2 * Math.PI * HUM_HZ * this.n++) / SAMPLE_RATE);
+      const v = CENTER + hum + ((Math.random() * 2 - 1) * this.amp) / NOISE_RMS_PER_AMP;
       frames.push([Math.max(0, Math.min(MAX_RAW, Math.round(v)))]);
     }
     this.feed(encodeFrames(frames));

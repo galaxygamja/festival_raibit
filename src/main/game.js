@@ -10,8 +10,13 @@ const SAMPLES_NEEDED = 50;
 const MEASURE_TIMEOUT_MS = 8000;
 const MAX_SCORE = 9999;
 
-function toScore(raw, factor) {
-  const v = Math.round(Number(raw) * Number(factor));
+// 점수 곡선: 세기 × 보정계수를 0~1 로 본 뒤 curve 제곱 (1 이면 직선). 1 보다 작으면 높은 점수일수록 같은 점수를 더 올리기 어렵다.
+const DEFAULT_CURVE = 0.6;
+
+function toScore(raw, factor, curve = 1) {
+  const x = Math.max(0, Number(raw) * Number(factor));
+  const c = Number(curve) > 0 ? Number(curve) : 1;
+  const v = Math.round(c === 1 ? x : MAX_SCORE * Math.pow(Math.min(1, x / MAX_SCORE), c));
   if (!Number.isFinite(v)) return 0;
   return Math.max(0, Math.min(MAX_SCORE, v));
 }
@@ -65,7 +70,8 @@ class Game {
     if (this.phase !== PHASE.MEASURING || which !== 'p1') return;
     const p = this.p1;
     if (p.samples >= SAMPLES_NEEDED) return;
-    const v = toScore(raw, this.getSettings().calibration);
+    const s = this.getSettings();
+    const v = toScore(raw, s.calibration, s.scoreCurve);
     p.samples += 1;
     p.current = v;
     p.score = Math.max(p.score, v);
@@ -90,4 +96,4 @@ class Game {
   }
 }
 
-module.exports = { Game, PHASE, SAMPLES_NEEDED, MEASURE_TIMEOUT_MS, MAX_SCORE, toScore };
+module.exports = { Game, PHASE, SAMPLES_NEEDED, MEASURE_TIMEOUT_MS, MAX_SCORE, DEFAULT_CURVE, toScore };

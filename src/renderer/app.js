@@ -327,16 +327,17 @@
       }).join('');
     }
     var rb = $('rms-bar');
-    if (rb) rb.style.width = Math.max(0, Math.min(100, (emg.strength || 0) * (state.settings.calibration || 1) / MAX_SCORE * 100)) + '%';
+    if (rb) rb.style.width = Math.max(0, Math.min(100, (emg.score || 0) / MAX_SCORE * 100)) + '%';
     var zeroing = !!emg.zeroing;
     $('btn-zero').disabled = zeroing;
     $('btn-zero').textContent = zeroing ? '재는 중…' : '영점 잡기';
     $('rest-text').textContent = '휴식 ' + (emg.restRms != null ? emg.restRms : (state.settings.emg || {}).restRms || 0).toFixed(1) +
-      (emg.raw != null ? ' · 원시 ' + emg.raw + ' · RMS ' + (emg.rms || 0).toFixed(1) : '');
+      (emg.raw != null ? ' · 원시 ' + emg.raw + ' · RMS ' + (emg.rms || 0).toFixed(1) + ' · ' + (emg.score || 0) + '점' : '');
   }
 
   function fillSettingsInputs() {
     $('cal').value = state.settings.calibration;
+    $('curve').value = state.settings.scoreCurve;
     $('emg-channel').value = String((state.settings.emg || {}).channel || 1);
   }
 
@@ -494,22 +495,22 @@
     $('diag-version').textContent = state.version ? 'v' + state.version : '';
     if (!d) return;
     var sig = d.signal, ser = d.serial, ps = state.ports || {}, sb = ps.spikerbox || {}, st = ps.start || {};
-    var emg = state.emg || {}, set = state.settings || {}, cal = set.calibration || 1;
+    var emg = state.emg || {}, set = state.settings || {}, cal = set.calibration || 1, curve = set.scoreCurve || 1;
     drawScope(sig);
     drawHist(sig);
     renderRec();
 
-    var score = Math.min(MAX_SCORE, Math.round((emg.strength || 0) * cal));
+    var score = emg.score || 0;
     var top = sig.bits ? Math.pow(2, sig.bits) - 1 : null;
     var nums = [
       ['원시값 (지금)', fmt(sig.win.last)],
       ['평균 (100 ms)', fmt(sig.win.mean, 1)],
       ['최소 ~ 최대 (100 ms)', sig.win.n ? sig.win.min + ' ~ ' + sig.win.max : '-'],
-      ['RMS (100 ms)', fmt(emg.rms, 1)],
+      ['RMS (거른 뒤)', fmt(emg.rms, 1)],
+      ['RMS (거르기 전)', fmt(emg.rmsRaw, 1)],
       ['휴식 RMS (영점)', fmt(emg.restRms, 1) + (emg.zeroing ? ' · 재는 중' : '')],
       ['세기 = RMS − 휴식', fmt(emg.strength, 1)],
-      ['점수 = 세기 × ' + cal, String(score)],
-      ['게이지 단계', levelOf(score) + ' / 15'],
+      ['점수 (×' + cal + ', 곡선 ' + curve + ')', String(score)],
       ['초당 샘플', sig.rate ? sig.rate.toLocaleString() : '-'],
       ['1초 최소 ~ 최대', sig.sec.n ? sig.sec.min + ' ~ ' + sig.sec.max : '-'],
       ['누적 최소 ~ 최대', sig.range.min == null ? '-' : sig.range.min + ' ~ ' + sig.range.max],
@@ -519,7 +520,7 @@
       ['마지막 샘플', ago(sig.lastAgo)],
     ];
     $('d-signal').innerHTML = nums.map(function (n, i) {
-      var color = i === 12 && sig.clip > 0 ? ' style="color:' + BAD + '"' : i === 6 ? ' style="color:' + AMBER + '"' : '';
+      var color = i === 12 && sig.clip > 0 ? ' style="color:' + BAD + '"' : i === 7 ? ' style="color:' + AMBER + '"' : '';
       return '<div class="num"><span>' + esc(n[0]) + '</span><b' + color + '>' + esc(n[1]) + '</b></div>';
     }).join('');
 
@@ -676,7 +677,7 @@
   }
 
   function saveSettings() {
-    var next = { calibration: parseFloat($('cal').value), emg: { channel: parseInt($('emg-channel').value, 10) } };
+    var next = { calibration: parseFloat($('cal').value), scoreCurve: parseFloat($('curve').value), emg: { channel: parseInt($('emg-channel').value, 10) } };
     api.saveSettings(next).then(function (s) {
       state.settings = s;
       fillSettingsInputs();

@@ -15,7 +15,7 @@ const { SerialManager, parseLine, classifyProbe, roleKeyOf, retryDelay } = requi
 const { Simulator } = require('../src/main/sim');
 
 const { SpikerBoxParser, parseMessageText, encodeFrames, encodeMessage } = require('../src/main/spikerbox');
-const { EmgWindow, strengthOf, RestMeter } = require('../src/main/emg');
+const { EmgWindow, EmgFilter, strengthOf, RestMeter } = require('../src/main/emg');
 const { unwrapReport, buildCommand, deviceKey, pickDevices } = require('../src/main/hid');
 const { Diag, buckets } = require('../src/main/diag');
 const { Recorder, HEADER } = require('../src/main/recorder');
@@ -219,7 +219,7 @@ test('v2.0.x 파일 옮기기: 명예의 전당 이름은 살리고, 나머지 �
 
 console.log('저장');
 
-const DEFAULTS = { calibration: 1, emg: { channel: 1, restRms: 0 }, portRoles: {}, fullscreen: true };
+const DEFAULTS = { calibration: 176, scoreCurve: 0.6, emg: { channel: 1, restRms: 0, filtered: true }, portRoles: {}, fullscreen: true };
 
 test('저장 후 다시 읽어도 유지 (앱 재시작 흉내), 손상 파일은 기본값', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'punch-'));
@@ -252,8 +252,43 @@ test('설정값 범위 정리, v1 설정(calibration {p1,p2}) 이전', () => {
   assert.deepStrictEqual(normalizeSettings({ calibration: { p1: 2, p2: 3 } }), { ...DEFAULTS, calibration: 2 });
   const s = normalizeSettings({ calibration: -1, emg: { channel: 9, restRms: -4 }, portRoles: { a: 'start', b: 'x', c: 'spikerbox' } });
   assert.strictEqual(s.calibration, 0.001);
-  assert.deepStrictEqual(s.emg, { channel: 1, restRms: 0 });
+  assert.deepStrictEqual(s.emg, { channel: 1, restRms: 0, filtered: true });
   assert.deepStrictEqual(s.portRoles, { a: 'start', c: 'spikerbox' });
+});
+
+test('v2.1.6 이전 설정: 거르지 않은 영점은 지우고, 예전 기본 보정(1)은 새 기본값으로', () => {
+  const old = normalizeSettings({ calibration: 1, emg: { channel: 1, restRms: 32.4 } });
+  assert.strictEqual(old.calibration, 176);
+  assert.strictEqual(old.emg.restRms, 0);
+  assert.strictEqual(normalizeSettings({ calibration: 3, emg: { restRms: 9 } }).calibration, 3); // 직접 바꾼 보정은 유지
+  const now = normalizeSettings({ calibration: 1, emg: { channel: 2, restRms: 2.5, filtered: true } });
+  assert.deepStrictEqual([now.calibration, now.emg.restRms], [1, 2.5]);
+  assert.strictEqual(normalizeSettings({ scoreCurve: 5 }).scoreCurve, 1);
+});
+
+test('점수 곡선: 1 이면 직선, 0.6 이면 높은 점수일수록 더 많은 힘이 든다', () => {
+  assert.strictEqual(toScore(35, 158), 5530);
+  assert.strictEqual(toScore(35, 158, 1), 5530);
+  assert.strictEqual(toScore(35, 158, 0.6), 7008); // 실제 녹화의 최대 힘 ≈ 7000점
+  assert.strictEqual(toScore(0, 158, 0.6), 0);
+  assert.strictEqual(toScore(1000, 158, 0.6), 9999);
+  // 같은 세기 차이(+10)라도 위로 갈수록 점수가 덜 오른다
+  const d1 = toScore(15, 158, 0.6) - toScore(5, 158, 0.6), d2 = toScore(45, 158, 0.6) - toScore(35, 158, 0.6);
+  assert.ok(d1 > d2 * 1.5, d1 + ' vs ' + d2);
+});
+
+test('전원 잡음 필터: 60 Hz 와 배수는 거의 없애고, 근육 대역(100~400 Hz)은 대부분 남긴다', () => {
+  const rms = (fn) => {
+    const f = new EmgFilter(10000);
+    const x = Array.from({ length: 20000 }, (_, i) => 512 + fn(i / 10000));
+    const y = f.process(x).slice(10000);
+    const m = y.reduce((a, b) => a + b, 0) / y.length;
+    return Math.sqrt(y.reduce((a, b) => a + (b - m) ** 2, 0) / y.length);
+  };
+  const sine = (hz) => (t) => 100 * Math.sin(2 * Math.PI * hz * t); // RMS 70.7
+  for (const hz of [60, 180, 300]) assert.ok(rms(sine(hz)) < 7, hz + ' Hz ' + rms(sine(hz)));
+  for (const hz of [130, 240, 360]) assert.ok(rms(sine(hz)) > 40, hz + ' Hz ' + rms(sine(hz)));
+  assert.ok(rms(() => 0) < 0.01); // 직류(512)만 있으면 0
 });
 
 test('v1 명예의 전당 파일(player 있음)을 읽으면 player 는 버린다', () => {
@@ -367,8 +402,11 @@ test('EmgWindow RMS', () => {
 });
 
 test('strengthOf', () => {
-  assert.strictEqual(strengthOf(100, 30), 70);
+  assert.strictEqual(strengthOf(100, 30, 0), 70);
   assert.strictEqual(strengthOf(10, 30), 0);
+  assert.ok(Math.abs(strengthOf(35, 2.2) - 31.3) < 1e-9); // 영점 + 여유 1.5
+  assert.strictEqual(strengthOf(3.5, 2.2), 0); // 쉴 때 흔들림은 0점
+  assert.ok(Math.abs(toScore(strengthOf(35, 2.2), 176, 0.6) - 7000) < 30);
 });
 
 test('RestMeter 는 3초 평균', () => {
@@ -382,30 +420,34 @@ test('RestMeter 는 3초 평균', () => {
   assert.strictEqual(m.result(), 20);
 });
 
-test('가짜 SpikerBox: A 를 누른 구간의 RMS 가 뗀 구간보다 10배 이상', () => {
+test('가짜 SpikerBox: 거르기 전에는 전원 잡음이 크고, 거른 뒤 A 를 누른 구간이 뗀 구간보다 5배 이상', () => {
   const chunks = [];
   const sim = new Simulator((buf) => chunks.push(buf));
   sim.setEnabled(true); // HWT 메시지 한 번
   sim.setEnabled(false);
   const parser = new SpikerBoxParser({ channels: 1 });
-  const win = new EmgWindow();
+  const win = new EmgWindow(), rawWin = new EmgWindow(), filter = new EmgFilter(10000);
+  let rawRms = 0;
   const measure = (ticks) => {
     let rms = 0;
     for (let i = 0; i < ticks; i++) {
       sim.tick();
       const r = parser.push(chunks.splice(0).reduce((a, b) => Buffer.concat([a, b]), Buffer.alloc(0)));
-      win.add(r.frames.map((f) => f[0]));
-      if ((i + 1) % 10 === 0) rms = win.take().rms; // 10틱 = 100 ms
+      const v = r.frames.map((f) => f[0]);
+      win.add(filter.process(v));
+      rawWin.add(v);
+      if ((i + 1) % 10 === 0) { rms = win.take().rms; rawRms = rawWin.take().rms; } // 10틱 = 100 ms
     }
     return rms;
   };
   assert.ok(chunks.length === 1 && chunks[0].includes(Buffer.from('HWT:MUSCLESS;')));
   chunks.length = 0;
   const rest = measure(100);
+  assert.ok(rawRms > 10, 'raw rest ' + rawRms);
+  assert.ok(rest > 1 && rest < 3.5, 'rest ' + rest);
   sim.key('a', true);
   const held = measure(200);
-  assert.ok(rest > 1, 'rest ' + rest);
-  assert.ok(held > rest * 10, held + ' vs ' + rest);
+  assert.ok(held > rest * 5, held + ' vs ' + rest);
 });
 
 test('기록 전체 삭제: 빈 목록으로 저장하고 지우기 전 파일은 백업', () => {
@@ -603,11 +645,11 @@ test('녹화: 100 ms 구간마다 CSV 한 줄, 원시값은 .raw 에 이어 쓰�
   r.setLabel('최대');
   r.addSamples([510, 514]);
   r.addSamples([512]);
-  r.addWindow({ rms: 1.634, strength: 0.5 }, { restRms: 1.1, calibration: 2, score: 1, phase: 'idle' }, 1100);
+  r.addWindow({ rms: 1.634, rmsRaw: 9, strength: 0.5 }, { restRms: 1.1, calibration: 2, curve: 0.6, score: 1, phase: 'idle' }, 1100);
   r.setLabel('없는 표시');
-  r.addWindow(null, { restRms: 1.1, calibration: 2, phase: 'idle' }, 1200);
+  r.addWindow(null, { restRms: 1.1, calibration: 2, curve: 0.6, phase: 'idle' }, 1200);
   r.addSamples([500]);
-  r.addWindow({ rms: 0, strength: 0 }, { restRms: 1.1, calibration: 2, score: 0, phase: 'measuring' }, 1300);
+  r.addWindow({ rms: 0, rmsRaw: 0, strength: 0 }, { restRms: 1.1, calibration: 2, curve: 0.6, score: 0, phase: 'measuring' }, 1300);
   const st = r.status(1300);
   assert.strictEqual(st.rows, 3);
   assert.deepStrictEqual(st.labelCounts, { 최대: 1 });
@@ -618,9 +660,9 @@ test('녹화: 100 ms 구간마다 CSV 한 줄, 원시값은 .raw 에 이어 쓰�
   assert.ok(csv[0].startsWith('# version: "9.9.9"'));
   const rows = csv.slice(csv.indexOf(HEADER) + 1).filter(Boolean);
   assert.deepStrictEqual(rows, [
-    '100,최대,1.63,0.5,1.1,2,1,512,510,514,3,0,idle',
-    '200,,,,1.1,2,,,,,0,3,idle',
-    '300,,0,0,1.1,2,0,500,500,500,1,3,measuring',
+    '100,최대,1.63,9,0.5,1.1,2,0.6,1,512,510,514,3,0,idle',
+    '200,,,,,1.1,2,0.6,,,,,0,3,idle',
+    '300,,0,0,0,1.1,2,0.6,0,500,500,500,1,3,measuring',
   ]);
   const raw = fs.readFileSync(r.lastFile.replace(/\.csv$/, '.raw'));
   assert.deepStrictEqual([0, 1, 2, 3].map((i) => raw.readInt16LE(i * 2)), [510, 514, 512, 500]);

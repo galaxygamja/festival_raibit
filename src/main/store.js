@@ -6,8 +6,10 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_SETTINGS = {
-  calibration: 1.0, // 보정계수 (원시 세기 × 계수 → 점수)
-  emg: { channel: 1, restRms: 0 }, // SpikerBox 채널(1|2), 휴식 RMS(영점)
+  // 보정계수: 거른 세기 × 계수 → 곡선 → 점수. 176 이면 실제 녹화의 최대 힘(거른 RMS ≈ 35, 영점 ≈ 2.2)이 약 7000점 (곡선 0.6)
+  calibration: 176,
+  scoreCurve: 0.6, // 점수 곡선 지수 (1 = 직선, 작을수록 높은 점수가 어렵다)
+  emg: { channel: 1, restRms: 0, filtered: true }, // SpikerBox 채널(1|2), 휴식 RMS(영점, 거른 신호 기준)
   portRoles: {}, // { [path]: 'spikerbox' | 'start' }, 없는 path는 자동 판별
   fullscreen: true, // 앱을 켤 때 전체화면(kiosk)으로 시작할지
 };
@@ -74,11 +76,15 @@ function normalizeSettings(raw) {
       if (s.portRoles[k] === 'spikerbox' || s.portRoles[k] === 'start') portRoles[k] = s.portRoles[k];
     });
   }
+  // v2.1.6 까지는 거르지 않은 RMS 기준이라 영점·보정이 맞지 않는다 → 영점은 지우고, 예전 기본값(1)이던 보정은 새 기본값으로
+  const old = s.emg && typeof s.emg === 'object' && !emg.filtered;
   return {
-    calibration: clampNum(cal, 0.001, 1000, DEFAULT_SETTINGS.calibration),
+    calibration: old && Number(cal) === 1 ? DEFAULT_SETTINGS.calibration : clampNum(cal, 0.001, 100000, DEFAULT_SETTINGS.calibration),
+    scoreCurve: clampNum(s.scoreCurve, 0.2, 1, DEFAULT_SETTINGS.scoreCurve),
     emg: {
       channel: Number(emg.channel) === 2 ? 2 : 1,
-      restRms: clampNum(emg.restRms, 0, 100000, 0),
+      restRms: old ? 0 : clampNum(emg.restRms, 0, 100000, 0),
+      filtered: true,
     },
     portRoles,
     fullscreen: typeof s.fullscreen === 'boolean' ? s.fullscreen : DEFAULT_SETTINGS.fullscreen,
