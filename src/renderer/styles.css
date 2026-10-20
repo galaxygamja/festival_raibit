@@ -94,3 +94,30 @@ a:hover { color: #FFD27A; }
   border: 2px solid #4A2E28;
 }
 #admin select:focus { outline: 2px solid #FFB21E; outline-offset: 2px; }
+
+/* 관리자 3페이지: 설정 */
+#settings { gap: 20px; }
+#settings ::-webkit-scrollbar { width: 8px; }
+#settings ::-webkit-scrollbar-thumb { background: #4A2E28; border-radius: 4px; }
+#settings input, #settings button, #settings select { user-select: auto; }
+#settings input:focus, #settings select:focus { outline: 2px solid #FFB21E; outline-offset: 2px; }
+#settings button:focus-visible { outline: 2px solid #FFB21E; outline-offset: 3px; }
+#settings .field { font-size: 18px; }
+.card { box-sizing: border-box; padding: 16px 22px; border-radius: 20px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.card h2 { margin: 0; font-size: 26px; font-weight: 400; }
+.hint { font-size: 16px; color: #8E7770; }
+.btn { height: 40px; padding: 0 14px; border-radius: 10px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 19px; cursor: pointer; white-space: nowrap; }
+.btn.amber { border-color: #FFB21E; color: #FFB21E; }
+.trow { display: grid; grid-template-columns: 40px 1fr 1fr 1.3fr 44px; gap: 10px; align-items: center; }
+.trow input { box-sizing: border-box; width: 100%; height: 40px; padding: 0 10px; border-radius: 10px; font-family: inherit; font-size: 22px; color: #F3E6E1; background: #120807; border: 2px solid #4A2E28; user-select: text; font-variant-numeric: tabular-nums; }
+.trow .slope { font-size: 18px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 이름 입력창 · 축하 */
+#name-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 4, 3, 0.72); z-index: 20; font-family: 'Do Hyeon', sans-serif; color: #F3E6E1; }
+#name-modal[hidden] { display: none; }
+#name-modal input { user-select: text; }
+#fx { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; pointer-events: none; z-index: 10; }
+#celebrate { position: absolute; left: 0; right: 0; bottom: 70px; display: flex; justify-content: center; pointer-events: none; z-index: 11; font-family: 'Do Hyeon', sans-serif; }
+#celebrate[hidden] { display: none; }
+#celebrate div { padding: 14px 44px; border-radius: 26px; background: rgba(28, 15, 13, 0.92); border: 3px solid #FFB21E; font-size: 68px; color: #FFD27A; white-space: nowrap; text-shadow: 0 0 18px #FFB21E, 0 0 44px rgba(255,178,30,0.6); box-shadow: 0 0 40px rgba(255,178,30,0.5); animation: pop 0.5s ease-out; }
+@keyframes pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }

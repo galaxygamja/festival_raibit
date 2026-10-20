@@ -1,8 +1,9 @@
 'use strict';
 
 const path = require('path');
-const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell } = require('electron');
-const { Game, toScore } = require('./game');
+const fs = require('fs');
+const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog } = require('electron');
+const { Game, scoreOf, DEFAULT_SCORE_TABLE } = require('./game');
 const hall = require('./hall');
 const { Store, normalizeSettings } = require('./store');
 const { SerialManager } = require('./serial');
@@ -35,6 +36,8 @@ const diag = new Diag();
 let diagOn = false; // 관리자 2페이지가 열려 있을 때만 진단 정보를 payload 에 싣는다
 let recorder = null; // 관리자 2페이지 녹화 (userData/recordings)
 const startedAt = Date.now();
+// 도전자 이름: nextName = 다음 측정에 쓸 이름 (Control+F 로 입력), currentName = 지금 측정 중인 사람, namePrompt = START 가 눌렸는데 이름이 없어 입력창을 띄운 상태
+let nextName = null, currentName = null, namePrompt = false;
 
 // 최근 로그를 진단 화면에서 보이게 모아 둔다
 const logs = [];
@@ -76,15 +79,17 @@ function payload() {
   return {
     game: game.snapshot(t),
     result: lastResult,
+    name: { next: nextName, current: currentName, prompt: namePrompt },
     hall: hallTop,
     recordsRev, // 전체 기록은 크기가 커서 payload 에 싣지 않고, 관리자 화면이 records:get 으로 받아 간다
     recordsTotal: records.length,
     ports: serial.status(t),
     emg: {
       raw: live.raw, rms: Math.round(live.rms * 10) / 10, rmsRaw: Math.round(live.rmsRaw * 10) / 10, strength: Math.round(live.strength * 10) / 10,
-      score: live.score, restRms: settings.emg.restRms, zeroing: rest.running,
+      score: live.score, restRms: settings.emg.restRms, margin: settings.emg.margin, zeroing: rest.running,
     },
     settings,
+    scoreTableDefault: DEFAULT_SCORE_TABLE,
     sim: sim.enabled,
     platform: process.platform,
     fullscreen: isFullscreen(),
@@ -107,6 +112,33 @@ function diagPayload(t) {
     },
   };
 }
+
+/** 측정 시작. 이름 받기가 켜져 있고 이름이 없으면(관리자 버튼 제외) 시작하지 않고 이름 입력창을 띄운다 */
+function requestStart(fromAdmin) {
+  if (game.phase === 'measuring') return;
+  if (!fromAdmin && settings.askName && !nextName) {
+    namePrompt = true;
+    push();
+    return;
+  }
+  startMeasure();
+}
+
+function startMeasure() {
+  if (!game.start(now())) return;
+  lastResult = null;
+  currentName = nextName;
+  nextName = null;
+  namePrompt = false;
+  push();
+}
+
+function cleanPersonName(name) {
+  const s = String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, 20);
+  return s || null;
+}
+
+const EXPORT_KEYS = ['scoreTable', 'askName', 'emg']; // 포트 역할·전체화면은 노트북마다 다르므로 빼고, 영점은 가져올 때 지금 값을 쓴다
 
 function push(force) {
   if (!win || win.isDestroyed()) return;
@@ -199,8 +231,50 @@ function setupMenu() {
 
 function setupIpc() {
   ipcMain.handle('state:get', () => payload());
-  ipcMain.handle('game:start', () => { if (game.start(now())) lastResult = null; push(); });
-  ipcMain.handle('game:stop', () => { game.stop(); push(); });
+  ipcMain.handle('game:start', () => requestStart(true));
+  ipcMain.handle('game:stop', () => {
+    // 중지하면 이번 사람 이름은 다음 측정으로 돌려 둔다
+    if (game.stop() && currentName && !nextName) nextName = currentName;
+    currentName = null;
+    push();
+  });
+  ipcMain.handle('name:set', (_e, name, startNow) => {
+    nextName = cleanPersonName(name);
+    const wasPrompt = namePrompt;
+    namePrompt = false;
+    if (startNow || wasPrompt) startMeasure();
+    else push();
+  });
+  ipcMain.handle('name:cancel', () => { namePrompt = false; push(); });
+  ipcMain.handle('settings:export', async () => {
+    const r = await dialog.showSaveDialog(win, { title: '설정 내보내기', defaultPath: 'raibit-settings.json', filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+    const out = {};
+    EXPORT_KEYS.forEach((k) => { out[k] = settings[k]; });
+    try {
+      fs.writeFileSync(r.filePath, JSON.stringify({ app: 'raibitScoreboard', version: app.getVersion(), exportedAt: new Date().toISOString(), settings: out }, null, 2) + '\n');
+      return { ok: true, file: r.filePath };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  ipcMain.handle('settings:import', async () => {
+    const r = await dialog.showOpenDialog(win, { title: '설정 가져오기', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (r.canceled || !r.filePaths.length) return { ok: false, canceled: true };
+    try {
+      const data = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'));
+      const inc = data && typeof data.settings === 'object' && data.settings ? data.settings : null;
+      if (!inc) return { ok: false, error: '설정 파일이 아닙니다' };
+      const picked = {};
+      EXPORT_KEYS.forEach((k) => { if (k in inc) picked[k] = inc[k]; });
+      settings = normalizeSettings({ ...settings, ...picked, emg: { ...settings.emg, ...(picked.emg || {}), restRms: settings.emg.restRms, filtered: true } });
+      saveSettings();
+      push();
+      return { ok: !lastSaveError, file: r.filePaths[0], error: lastSaveError };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
   ipcMain.handle('records:get', () => ({ rev: recordsRev, records: hall.sortRecords(records) }));
   ipcMain.handle('records:save', (_e, edits) => {
     if (!edits || typeof edits !== 'object') return false;
@@ -233,6 +307,7 @@ function setupIpc() {
   ipcMain.handle('serial:reconnect', () => { serial.reconnect(); push(); });
   ipcMain.handle('settings:save', (_e, next) => {
     settings = normalizeSettings({ ...settings, ...next, emg: { ...settings.emg, ...(next && next.emg) } });
+    if (!settings.askName) namePrompt = false;
     saveSettings();
     push();
     return settings;
@@ -244,8 +319,8 @@ function setupIpc() {
     recorder.start(now(), {
       started: new Date().toISOString(), version: app.getVersion(), platform: process.platform,
       device: { name: sb.name || null, hwt: sb.hwt || null, transport: sb.transport || null, channels: sb.channels || null },
-      sim: sim.enabled, channel: settings.emg.channel, calibration: settings.calibration, scoreCurve: settings.scoreCurve, restRms: settings.emg.restRms, windowMs: EMG_WINDOW_MS,
-      filter: 'highpass 80Hz x2 + notch 60/180/300/420/540Hz Q4 (rms 열), rms_raw = 거르기 전',
+      sim: sim.enabled, emg: settings.emg, scoreTable: settings.scoreTable, windowMs: EMG_WINDOW_MS,
+      filter: 'rms 열 = 고역 통과(emg.highpassHz) ×2 + 전원 주파수(emg.mainsHz) 홀수 배수 노치 (emg.notch), rms_raw = 거르기 전, strength = rms - 영점 - emg.margin',
     });
     push();
   });
@@ -278,7 +353,7 @@ function setupIpc() {
   ipcMain.handle('sim:key', (_e, key, down) => {
     if (!sim.enabled) return;
     if (key === 's') {
-      if (down) { if (game.start(now())) lastResult = null; push(); }
+      if (down) requestStart(false);
     } else if (key === 'release') {
       sim.releaseAll();
     } else {
@@ -305,23 +380,24 @@ app.whenReady().then(() => {
   game = new Game({
     getSettings: () => settings,
     onResult: ({ score }) => {
-      // RESULT 확정 즉시 자동 저장. rank = 명예의 전당 순위, place/total = 전체 기록 중 순위
-      const r = hall.addResult(records, score, new Date());
+      // RESULT 확정 즉시 자동 저장. rank = 명예의 전당 순위, place/total = 전체 기록 중 순위, name = 입력한 이름 (없으면 null)
+      const r = hall.addResult(records, score, new Date(), currentName);
       if (r.changed) setRecords(r.records);
-      lastResult = { score, rank: r.rank, place: r.place, total: r.total };
+      lastResult = { score, rank: r.rank, place: r.place, total: r.total, id: r.id || null, name: r.changed ? currentName : null };
+      currentName = null;
     },
   });
 
   serial = new SerialManager({ getSettings: () => settings });
   serial.on('emg', (values, rate) => {
-    emgFilter.setRate(rate);
+    emgFilter.configure(rate, settings.emg);
     emgWin.add(emgFilter.process(values));
     rawWin.add(values);
     lastRaw = values[values.length - 1];
     diag.addSamples(values, now());
     recorder.addSamples(values);
   });
-  serial.on('start', () => { if (game.start(now())) lastResult = null; push(); });
+  serial.on('start', () => requestStart(false));
 
   sim = new Simulator((buf) => serial.feedSpikerBox(SIM_PORT, buf));
 
@@ -339,15 +415,15 @@ app.whenReady().then(() => {
     if (!w) {
       live = { raw: null, rms: 0, rmsRaw: 0, strength: 0, score: 0 }; // SpikerBox 끊김: 이 구간은 건너뛴다
       diag.addWindow(null);
-      recorder.addWindow(null, { restRms: settings.emg.restRms, calibration: settings.calibration, curve: settings.scoreCurve, phase: game.phase }, t);
+      recorder.addWindow(null, { restRms: settings.emg.restRms, phase: game.phase }, t);
       if (rest.running && t - zeroStartedAt > ZERO_TIMEOUT_MS) rest.stop();
       return;
     }
-    const strength = strengthOf(w.rms, settings.emg.restRms);
-    live = { raw: lastRaw, rms: w.rms, rmsRaw: wr ? wr.rms : 0, strength, score: toScore(strength, settings.calibration, settings.scoreCurve) };
+    const strength = strengthOf(w.rms, settings.emg.restRms, settings.emg.margin);
+    live = { raw: lastRaw, rms: w.rms, rmsRaw: wr ? wr.rms : 0, strength, score: scoreOf(strength, settings) };
     diag.addWindow(live, recorder.label);
     recorder.addWindow(live, {
-      restRms: settings.emg.restRms, calibration: settings.calibration, curve: settings.scoreCurve, score: live.score, phase: game.phase,
+      restRms: settings.emg.restRms, score: live.score, phase: game.phase,
     }, t);
     if (rest.running && rest.add(w.rms, t)) {
       settings = normalizeSettings({ ...settings, emg: { ...settings.emg, restRms: rest.result() } });

@@ -34,11 +34,11 @@ function hallOf(records) {
 }
 
 let seq = 0;
-function makeEntry(score, date) {
+function makeEntry(score, date, name) {
   seq += 1;
   return {
     id: date.getTime().toString(36) + '-' + seq.toString(36) + '-' + Math.random().toString(36).slice(2, 6),
-    name: TEMP_NAME,
+    name: cleanName(name),
     score,
     at: date.toISOString(),
   };
@@ -48,14 +48,14 @@ function makeEntry(score, date) {
  * 측정 결과 하나를 기록한다. 0점은 남기지 않는다.
  * rank = 명예의 전당 순위(1~5, 밖이면 null), place = 전체 기록 중 순위, total = 전체 기록 수
  */
-function addResult(records, score, date = new Date()) {
+function addResult(records, score, date = new Date(), name = null) {
   if (!(score > 0)) return { records, changed: false, rank: null, place: null, total: records.length };
-  const entry = makeEntry(score, date);
+  const entry = makeEntry(score, date, name);
   let next = records.concat([entry]);
   if (next.length > MAX_RECORDS) next = sortRecords(next).slice(0, MAX_RECORDS);
   const place = sortRecords(next).indexOf(entry) + 1;
   const rank = hallOf(next).indexOf(entry) + 1;
-  return { records: next, changed: true, rank: rank || null, place: place || null, total: next.length };
+  return { records: next, changed: true, rank: rank || null, place: place || null, total: next.length, id: entry.id, name: entry.name };
 }
 
 /** edits: { [id]: { name?, score? } }. 없는 id·잘못된 점수는 무시. */

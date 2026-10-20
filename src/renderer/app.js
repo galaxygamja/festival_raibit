@@ -125,7 +125,14 @@
     var g = state.game;
     var phase = g.phase;
     var res = resultInfo(phase === 'result' ? state.result : null);
-    var labels = { idle: '다음 경기 대기', measuring: '5초 동안 힘껏 쥐세요', result: res.rank ? '최종 기록 · 명예의 전당 ' + res.rank + '위!' : '최종 기록' };
+    var nm = state.name || {};
+    var who = function (n) { return n ? esc(n) + '님 · ' : ''; };
+    var resultName = phase === 'result' && state.result ? state.result.name : null;
+    var labels = {
+      idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '다음 경기 대기',
+      measuring: who(nm.current) + '5초 동안 힘껏 쥐세요',
+      result: who(resultName) + (res.rank ? '최종 기록 · 명예의 전당 ' + res.rank + '위!' : '최종 기록'),
+    };
     var bannerStyle = 'background:#1C0F0D;border:3px solid ' + AMBER + ';box-shadow:0 0 30px ' + AMBER + '55, inset 0 0 30px ' + AMBER + '22';
 
     var banner = '<div style="flex: none; box-sizing: border-box; padding: 18px 40px 16px; border-radius: 28px; display: flex; flex-direction: column; align-items: center; gap: 6px; ' + bannerStyle + '">' +
@@ -335,12 +342,6 @@
       (emg.raw != null ? ' · 원시 ' + emg.raw + ' · RMS ' + (emg.rms || 0).toFixed(1) + ' · ' + (emg.score || 0) + '점' : '');
   }
 
-  function fillSettingsInputs() {
-    $('cal').value = state.settings.calibration;
-    $('curve').value = state.settings.scoreCurve;
-    $('emg-channel').value = String((state.settings.emg || {}).channel || 1);
-  }
-
   function renderAdmin() {
     var g = state.game;
     $('app-version').textContent = state.version ? 'v' + state.version : '';
@@ -353,6 +354,9 @@
     $('btn-start').disabled = busy;
     $('btn-stop').disabled = !busy;
     $('btn-reset-records').disabled = busy;
+    $('ask-name').checked = !!state.settings.askName;
+    var nm = state.name || {};
+    $('next-name').textContent = nm.current ? '측정 중: ' + nm.current : nm.next ? '다음 도전자: ' + nm.next : '다음 도전자 이름 없음';
 
     renderPorts();
 
@@ -367,7 +371,9 @@
   function render() {
     if (!state) return;
     renderMain();
-    if (adminOpen) { if (adminPage === 2) renderDiag(); else renderAdmin(); }
+    if (adminOpen) { if (adminPage === 2) renderDiag(); else if (adminPage === 3) renderSettings(); else renderAdmin(); }
+    renderNameModal();
+    checkCelebrate();
   }
 
 
@@ -495,7 +501,7 @@
     $('diag-version').textContent = state.version ? 'v' + state.version : '';
     if (!d) return;
     var sig = d.signal, ser = d.serial, ps = state.ports || {}, sb = ps.spikerbox || {}, st = ps.start || {};
-    var emg = state.emg || {}, set = state.settings || {}, cal = set.calibration || 1, curve = set.scoreCurve || 1;
+    var emg = state.emg || {}, set = state.settings || {}, nPts = (set.scoreTable || []).length;
     drawScope(sig);
     drawHist(sig);
     renderRec();
@@ -510,7 +516,7 @@
       ['RMS (거르기 전)', fmt(emg.rmsRaw, 1)],
       ['휴식 RMS (영점)', fmt(emg.restRms, 1) + (emg.zeroing ? ' · 재는 중' : '')],
       ['세기 = RMS − 휴식', fmt(emg.strength, 1)],
-      ['점수 (×' + cal + ', 곡선 ' + curve + ')', String(score)],
+      ['점수 (점수표 ' + nPts + '점)', String(score)],
       ['초당 샘플', sig.rate ? sig.rate.toLocaleString() : '-'],
       ['1초 최소 ~ 최대', sig.sec.n ? sig.sec.min + ' ~ ' + sig.sec.max : '-'],
       ['누적 최소 ~ 최대', sig.range.min == null ? '-' : sig.range.min + ' ~ ' + sig.range.max],
@@ -588,7 +594,7 @@
       ['버전', 'v' + state.version + (env.packaged ? ' · 설치본' : ' · 개발 실행')],
       ['실행 시간', dur(env.uptime)],
       ['환경', env.platform + ' ' + env.arch + ' · Electron ' + env.electron],
-      ['보정계수 · 채널', cal + ' · ' + ((set.emg || {}).channel || 1) + '번'],
+      ['점수표 · 채널', nPts + '점 · ' + ((set.emg || {}).channel || 1) + '번'],
       ['시뮬레이션', state.sim ? '켜짐' : '꺼짐', state.sim ? AMBER : null],
     ]) + '<div style="font-size: 13px; color: #8E7770; overflow-wrap: anywhere" title="' + esc(state.dataDir || '') + '">데이터 폴더 ' + esc(state.dataDir || '-') + '</div>';
 
@@ -607,15 +613,17 @@
     adminPage = n;
     $('admin').hidden = n !== 1;
     $('diag').hidden = n !== 2;
+    $('settings').hidden = n !== 3;
     if (document.activeElement) document.activeElement.blur();
     api.setDiag(n === 2);
-    if (n === 1) { renderAdminRows(true); fillSettingsInputs(); renderAdmin(); } else { renderDiag(); }
+    if (n === 1) { renderAdminRows(true); renderAdmin(); } else if (n === 2) { renderDiag(); } else { fillSettings(); renderSettings(); }
   }
 
   // ───────────────────────── 관리자 화면 열기 / 닫기 ─────────────────────────
   var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   $('shortcut').textContent = isMac ? 'Control + D' : 'Ctrl + D';
   $('fs-shortcut').textContent = isMac ? 'F11 / Control + Cmd + F' : 'F11';
+  $('name-shortcut').textContent = $('name-shortcut2').textContent = isMac ? 'Control + F' : 'Ctrl + F';
 
   function openAdmin() {
     adminOpen = true;
@@ -629,6 +637,7 @@
     if (document.activeElement) document.activeElement.blur();
     $('admin').hidden = true;
     $('diag').hidden = true;
+    $('settings').hidden = true;
     $('main').hidden = false;
     if (adminPage === 2) api.setDiag(false);
     adminPage = 1;
@@ -676,18 +685,6 @@
     });
   }
 
-  function saveSettings() {
-    var next = { calibration: parseFloat($('cal').value), scoreCurve: parseFloat($('curve').value), emg: { channel: parseInt($('emg-channel').value, 10) } };
-    api.saveSettings(next).then(function (s) {
-      state.settings = s;
-      fillSettingsInputs();
-      var btn = $('btn-save-settings');
-      btn.textContent = '저장됨';
-      btn.style.color = btn.style.borderColor = '#7BE08A';
-      setTimeout(function () { btn.textContent = '저장'; btn.style.color = btn.style.borderColor = '#FFB21E'; }, 1500);
-    });
-  }
-
   $('btn-close').addEventListener('click', closeAdmin);
   $('btn-close2').addEventListener('click', closeAdmin);
   $('btn-page2').addEventListener('click', function () { showPage(2); });
@@ -728,7 +725,6 @@
     if (el.dataset && el.dataset.path && api.setPortRole) { api.setPortRole(el.dataset.path, el.value); el.blur(); }
   });
   $('btn-reconnect').addEventListener('click', function () { api.reconnect(); });
-  $('btn-save-settings').addEventListener('click', saveSettings);
   $('sim-toggle').addEventListener('change', function (e) { api.setSim(e.target.checked); });
   $('btn-quit').addEventListener('click', function () {
     if (window.confirm('앱을 종료할까요?')) api.quit();
@@ -736,6 +732,310 @@
   $('rows').addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.isComposing) saveRecords();
   });
+
+  // ───────────────────────── 관리자 3페이지: 설정 ─────────────────────────
+  // 입력칸은 페이지를 열 때와 저장한 뒤에만 채운다 (0.05초마다 오는 상태로 덮어쓰지 않게)
+  var tableDraft = [];
+  var lastZeroing = false;
+
+  function settingsMsg(id, text, ok) {
+    $(id).textContent = text;
+    $(id).style.color = ok === false ? BAD : ok ? GOOD : DIM;
+  }
+
+  function fillSettings() {
+    var set = state.settings, e = set.emg || {};
+    $('s-channel').value = String(e.channel || 1);
+    $('s-mains').value = String(e.mainsHz || 60);
+    $('s-rest').value = Math.round((e.restRms || 0) * 100) / 100;
+    $('s-margin').value = e.margin;
+    $('s-hp').value = e.highpassHz;
+    $('s-notch').checked = e.notch !== false;
+    $('s-askname').checked = !!set.askName;
+    tableDraft = (set.scoreTable || []).map(function (p) { return [String(p[0]), String(p[1])]; });
+    renderTableRows();
+    settingsMsg('s-msg', '', null);
+  }
+
+  function draftTable() {
+    var pts = [];
+    tableDraft.forEach(function (r) {
+      var a = parseFloat(r[0]), b = parseFloat(r[1]);
+      if (isFinite(a) && isFinite(b) && a >= 0) pts.push([a, Math.max(0, Math.min(MAX_SCORE, b))]);
+    });
+    pts.sort(function (x, y) { return x[0] - y[0]; });
+    return pts.filter(function (p, i) { return i === 0 || p[0] !== pts[i - 1][0]; });
+  }
+
+  function scoreFromTable(st, t) {
+    if (t.length < 2) return 0;
+    var v;
+    if (st <= t[0][0]) v = t[0][0] > 0 ? t[0][1] * st / t[0][0] : t[0][1];
+    else if (st >= t[t.length - 1][0]) v = t[t.length - 1][1];
+    else { var i = 1; while (t[i][0] < st) i++; v = t[i - 1][1] + (t[i][1] - t[i - 1][1]) * (st - t[i - 1][0]) / (t[i][0] - t[i - 1][0]); }
+    return Math.max(0, Math.min(MAX_SCORE, Math.round(v)));
+  }
+
+  function renderTableRows() {
+    $('t-rows').innerHTML = tableDraft.map(function (r, i) {
+      return '<div class="trow"><div style="font-size: 18px; color: #8E7770">' + (i + 1) + '</div>' +
+        '<input type="number" step="0.5" min="0" data-i="' + i + '" data-k="0" aria-label="' + (i + 1) + '번 점 세기" value="' + esc(r[0]) + '">' +
+        '<input type="number" step="100" min="0" max="9999" data-i="' + i + '" data-k="1" aria-label="' + (i + 1) + '번 점 점수" value="' + esc(r[1]) + '">' +
+        '<div class="slope" data-slope="' + i + '"></div>' +
+        '<button type="button" class="btn" data-del="' + i + '" title="이 점 지우기" style="width: 44px; padding: 0; color: #FF8A7A">✕</button></div>';
+    }).join('');
+    updateSlopes();
+  }
+
+  function updateSlopes() {
+    var t = draftTable();
+    tableDraft.forEach(function (r, i) {
+      var el = document.querySelector('[data-slope="' + i + '"]');
+      if (!el) return;
+      var a = parseFloat(r[0]), k = -1;
+      for (var j = 0; j < t.length; j++) if (t[j][0] === a) k = j;
+      if (k < 0) { el.textContent = '숫자를 넣으세요'; el.style.color = BAD; return; }
+      el.style.color = '';
+      if (k === 0) el.textContent = t[0][0] > 0 ? '0 ~ ' + t[0][0] + ': ' + fmt(t[0][1] / t[0][0], 0) + '점' : '시작점';
+      else el.textContent = t[k - 1][0] + ' ~ ' + t[k][0] + ': ' + fmt((t[k][1] - t[k - 1][1]) / (t[k][0] - t[k - 1][0]), 0) + '점';
+    });
+    var bad = draftTable().length < 2;
+    settingsMsg('t-msg', bad ? '점이 2개 이상 있어야 합니다' : '저장해야 점수에 반영됩니다 · 저장된 표: ' + (state.settings.scoreTable || []).length + '점', bad ? false : null);
+  }
+
+  function drawTable(t, liveS, maxS) {
+    var c = $('t-graph'), g = c.getContext('2d'), W = c.width, H = c.height, L = 90, B = 50, R = 20, T = 20;
+    g.clearRect(0, 0, W, H);
+    var xmax = Math.max(10, t.length ? t[t.length - 1][0] * 1.15 : 10, (liveS || 0) * 1.05, (maxS || 0) * 1.05);
+    var x = function (v) { return L + (v / xmax) * (W - L - R); };
+    var y = function (v) { return H - B - (v / MAX_SCORE) * (H - B - T); };
+    g.strokeStyle = '#2E1B17'; g.lineWidth = 2; g.fillStyle = DIM; g.font = '26px sans-serif';
+    [0, 2500, 5000, 7500, 9999].forEach(function (v) { g.beginPath(); g.moveTo(L, y(v)); g.lineTo(W - R, y(v)); g.stroke(); g.fillText(String(v), 6, y(v) + 9); });
+    var step = xmax > 60 ? 20 : xmax > 30 ? 10 : 5;
+    for (var sx = 0; sx <= xmax; sx += step) { g.fillText(String(sx), x(sx) - 10, H - 14); }
+    g.fillText('세기', W - R - 60, H - 14);
+    if (t.length >= 2) {
+      g.strokeStyle = AMBER; g.lineWidth = 5; g.beginPath();
+      g.moveTo(x(0), y(scoreFromTable(0, t)));
+      t.forEach(function (p) { g.lineTo(x(p[0]), y(p[1])); });
+      g.lineTo(x(xmax), y(t[t.length - 1][1]));
+      g.stroke();
+      g.fillStyle = AMBER;
+      t.forEach(function (p) { g.beginPath(); g.arc(x(p[0]), y(p[1]), 9, 0, Math.PI * 2); g.fill(); });
+    }
+    var mark = function (st, col, label) {
+      if (st == null) return;
+      var sc = scoreFromTable(st, t);
+      g.strokeStyle = col; g.lineWidth = 3; g.setLineDash([10, 8]);
+      g.beginPath(); g.moveTo(x(st), y(0)); g.lineTo(x(st), y(sc)); g.lineTo(L, y(sc)); g.stroke(); g.setLineDash([]);
+      g.fillStyle = col; g.beginPath(); g.arc(x(st), y(sc), 12, 0, Math.PI * 2); g.fill();
+      g.font = '28px sans-serif'; g.fillText(label + ' ' + fmt(st, 1) + ' → ' + sc, Math.min(x(st) + 16, W - 330), y(sc) - 16);
+    };
+    if (maxS) mark(maxS, '#5AA9E6', '측정 최고');
+    mark(liveS || 0, '#FF6A45', '지금');
+  }
+
+  function renderSettings() {
+    $('settings-version').textContent = state.version ? 'v' + state.version : '';
+    var emg = state.emg || {}, g = state.game || {}, t = draftTable();
+    var maxS = g.p1 && g.p1.rawMax ? g.p1.rawMax : 0;
+    drawTable(t, emg.strength || 0, maxS);
+    $('t-live').textContent = '지금 세기 ' + fmt(emg.strength, 1) + ' → ' + scoreFromTable(emg.strength || 0, t) + '점' +
+      (maxS ? ' · 마지막 측정 최고 세기 ' + fmt(maxS, 1) + ' → ' + scoreFromTable(maxS, t) + '점' : '');
+    $('s-live').textContent = emg.zeroing ? '영점 재는 중… 힘을 빼세요' : '거른 RMS ' + fmt(emg.rms, 1) + ' · 거르기 전 ' + fmt(emg.rmsRaw, 1) + ' · 저장된 영점 ' + fmt(emg.restRms, 2);
+    if (lastZeroing && !emg.zeroing) $('s-rest').value = Math.round((emg.restRms || 0) * 100) / 100; // 영점 잡기가 끝나면 입력칸에 넣는다
+    lastZeroing = !!emg.zeroing;
+  }
+
+  function saveAllSettings() {
+    var t = draftTable();
+    if (t.length < 2) { settingsMsg('s-msg', '점수표에 점이 2개 이상 있어야 합니다.', false); return; }
+    var num = function (id, def) { var v = parseFloat($(id).value); return isFinite(v) ? v : def; };
+    var e = state.settings.emg || {};
+    var next = {
+      scoreTable: t,
+      askName: $('s-askname').checked,
+      emg: {
+        channel: parseInt($('s-channel').value, 10), mainsHz: parseInt($('s-mains').value, 10), notch: $('s-notch').checked,
+        restRms: num('s-rest', e.restRms), margin: num('s-margin', e.margin), highpassHz: num('s-hp', e.highpassHz),
+      },
+    };
+    api.saveSettings(next).then(function (s) {
+      state.settings = s;
+      fillSettings();
+      settingsMsg('s-msg', state.saveError ? state.saveError : '저장했습니다.', !state.saveError);
+    });
+  }
+
+  $('t-rows').addEventListener('input', function (e) {
+    var el = e.target;
+    if (!el.dataset || el.dataset.i == null) return;
+    tableDraft[+el.dataset.i][+el.dataset.k] = el.value;
+    updateSlopes();
+  });
+  $('t-rows').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button[data-del]') : null;
+    if (!b) return;
+    tableDraft.splice(+b.dataset.del, 1);
+    renderTableRows();
+  });
+  $('btn-t-add').addEventListener('click', function () {
+    var t = draftTable(), last = t.length ? t[t.length - 1] : [0, 0];
+    tableDraft.push([String(last[0] + 10), String(Math.min(MAX_SCORE, last[1]))]);
+    renderTableRows();
+    $('t-rows').scrollTop = $('t-rows').scrollHeight;
+  });
+  $('btn-t-default').addEventListener('click', function () {
+    tableDraft = (state.scoreTableDefault || []).map(function (p) { return [String(p[0]), String(p[1])]; });
+    renderTableRows();
+  });
+  $('btn-s-save').addEventListener('click', saveAllSettings);
+  $('btn-s-zero').addEventListener('click', function () { api.zeroEmg(); });
+  $('btn-open-settings').addEventListener('click', function () { showPage(3); });
+  $('btn-page3').addEventListener('click', function () { showPage(3); });
+  $('btn-p3-page1').addEventListener('click', function () { showPage(1); });
+  $('btn-p3-page2').addEventListener('click', function () { showPage(2); });
+  $('btn-close3').addEventListener('click', closeAdmin);
+  $('ask-name').addEventListener('change', function (e) { api.saveSettings({ askName: e.target.checked }); e.target.blur(); });
+  $('btn-export').addEventListener('click', function () {
+    api.exportSettings().then(function (r) {
+      if (r.canceled) return;
+      settingsMsg('file-msg', r.ok ? '저장한 설정(점수표 포함)을 내보냈습니다: ' + r.file : '내보내기 실패: ' + r.error, r.ok);
+    });
+  });
+  $('btn-import').addEventListener('click', function () {
+    api.importSettings().then(function (r) {
+      if (r.canceled) return;
+      settingsMsg('file-msg', r.ok ? '가져왔습니다: ' + r.file + ' · 영점을 다시 잡으세요' : '가져오기 실패: ' + r.error, r.ok);
+      if (r.ok) api.getState().then(function (st) { state = st; fillSettings(); });
+    });
+  });
+
+  // ───────────────────────── 도전자 이름 입력창 ─────────────────────────
+  // Control+F 로 미리 넣거나(nameLocal), 이름 받기가 켜진 상태에서 START 가 눌리면(state.name.prompt) 뜬다
+  var nameLocal = false, nameShown = false, nameQuietUntil = 0;
+
+  function nameModalWanted() {
+    // 방금 닫았으면 잠깐은 다시 띄우지 않는다 (닫기 전에 보낸 상태가 늦게 도착할 수 있다)
+    return !adminOpen && !!state && (nameLocal || (performance.now() > nameQuietUntil && !!(state.name && state.name.prompt)));
+  }
+
+  function renderNameModal() {
+    var want = nameModalWanted();
+    if (want === nameShown) {
+      if (want) $('name-hint').textContent = nameHint();
+      return;
+    }
+    nameShown = want;
+    $('name-modal').hidden = !want;
+    if (want) {
+      releaseSimKeys();
+      $('name-input').value = (state.name && state.name.next) || '';
+      $('name-hint').textContent = nameHint();
+      setTimeout(function () { $('name-input').focus(); }, 0);
+    } else if (document.activeElement === $('name-input')) {
+      $('name-input').blur();
+    }
+  }
+
+  function nameHint() {
+    return state.name && state.name.prompt
+      ? 'Enter: 바로 시작 · 비우고 Enter: 이름 없이 시작 · Esc: 취소'
+      : 'Enter: 저장 (START 를 누르면 시작) · Esc: 닫기';
+  }
+
+  function openNameModal() {
+    nameLocal = true;
+    renderNameModal();
+  }
+
+  function closeNameModal() {
+    nameLocal = false;
+    nameQuietUntil = performance.now() + 400;
+    nameShown = false;
+    $('name-modal').hidden = true;
+    $('name-input').blur();
+  }
+
+  $('name-input').addEventListener('keydown', function (e) {
+    e.stopPropagation(); // 시뮬레이션 키(A, S) 등으로 새지 않게
+    if (e.isComposing || e.keyCode === 229) return; // 한글 조합 중 Enter 는 조합 확정용
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var prompt = !!(state.name && state.name.prompt);
+      api.setName($('name-input').value, prompt);
+      closeNameModal();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (state.name && state.name.prompt) api.cancelName();
+      closeNameModal();
+    }
+  });
+
+  // ───────────────────────── 명예의 전당 축하 (이름 받기가 켜져 있을 때만) ─────────────────────────
+  var celebratedId = null, fx = null;
+
+  function checkCelebrate() {
+    var r = state.result, g = state.game;
+    var on = g.phase === 'result' && r && r.rank && r.id && state.settings.askName;
+    if (on && r.id !== celebratedId) {
+      celebratedId = r.id;
+      startCelebrate((r.name ? r.name + '님 ' : '') + r.rank + '위 축하드립니다!');
+    }
+    if (fx && (!on || adminOpen)) stopCelebrate();
+  }
+
+  var FX_COLORS = ['#FFD61F', '#FF9A1A', '#FF4A3D', '#EE3A8F', '#9B45F0', '#3D6BFF', '#7BE08A', '#FFFFFF'];
+
+  function startCelebrate(text) {
+    stopCelebrate();
+    $('celebrate-text').textContent = text;
+    $('celebrate').hidden = false;
+    var c = $('fx');
+    c.hidden = false;
+    var g = c.getContext('2d');
+    fx = { parts: [], started: performance.now(), nextBurst: 0, raf: 0 };
+    var burst = function () {
+      var cx = 160 + Math.random() * 1120, cy = 120 + Math.random() * 380;
+      var col = FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)];
+      var n = 70 + Math.floor(Math.random() * 40);
+      for (var i = 0; i < n; i++) {
+        var a = (Math.PI * 2 * i) / n, sp = 3 + Math.random() * 6;
+        fx.parts.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, col: Math.random() < 0.25 ? '#FFFFFF' : col, size: 3 + Math.random() * 3 });
+      }
+    };
+    var last = performance.now();
+    var step = function (t) {
+      if (!fx) return;
+      var dt = Math.min(50, t - last) / 16.7;
+      last = t;
+      var age = t - fx.started;
+      if (age < 6000 && t >= fx.nextBurst) { burst(); if (Math.random() < 0.4) burst(); fx.nextBurst = t + 280 + Math.random() * 320; }
+      g.clearRect(0, 0, c.width, c.height);
+      g.globalCompositeOperation = 'lighter';
+      fx.parts = fx.parts.filter(function (p) {
+        p.vx *= Math.pow(0.985, dt); p.vy = p.vy * Math.pow(0.985, dt) + 0.09 * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.life -= 0.012 * dt;
+        if (p.life <= 0) return false;
+        g.globalAlpha = Math.max(0, p.life);
+        g.fillStyle = p.col;
+        g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill();
+        return true;
+      });
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      if (age > 6000 && !fx.parts.length) { c.hidden = true; return; } // 폭죽은 6초, 축하 문구는 결과 화면 동안 유지
+      fx.raf = requestAnimationFrame(step);
+    };
+    fx.raf = requestAnimationFrame(step);
+  }
+
+  function stopCelebrate() {
+    if (fx) cancelAnimationFrame(fx.raf);
+    fx = null;
+    $('fx').hidden = true;
+    $('celebrate').hidden = true;
+  }
 
   // ───────────────────────── 키보드 ─────────────────────────
   // 한글 입력 상태에서도 동작하도록 e.key 대신 e.code 사용
@@ -760,6 +1060,13 @@
       if (adminOpen) closeAdmin(); else openAdmin();
       return;
     }
+    // 도전자 이름 입력: Control + F (Windows는 Ctrl + F). macOS 의 Control + Cmd + F 는 위에서 전체화면으로 처리했다.
+    if (e.code === 'KeyF' && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      if (!adminOpen && !e.repeat) { if (nameShown) closeNameModal(); else openNameModal(); }
+      return;
+    }
+    if (nameShown) return; // 입력창이 떠 있으면 시뮬레이션 키는 받지 않는다
     if (adminOpen) {
       if (e.key === 'Escape') { e.preventDefault(); closeAdmin(); return; }
       // 진단 페이지: 숫자키 0~4 로 지금 하는 동작 표시 (녹화 CSV 와 그래프 아래 띠에 남는다)

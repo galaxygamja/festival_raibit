@@ -4,12 +4,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const { DEFAULT_SCORE_TABLE, cleanScoreTable, toScore } = require('./game');
 
 const DEFAULT_SETTINGS = {
-  // 보정계수: 거른 세기 × 계수 → 곡선 → 점수. 176 이면 실제 녹화의 최대 힘(거른 RMS ≈ 35, 영점 ≈ 2.2)이 약 7000점 (곡선 0.6)
-  calibration: 176,
-  scoreCurve: 0.6, // 점수 곡선 지수 (1 = 직선, 작을수록 높은 점수가 어렵다)
-  emg: { channel: 1, restRms: 0, filtered: true }, // SpikerBox 채널(1|2), 휴식 RMS(영점, 거른 신호 기준)
+  // 점수표 [세기, 점수]: 구간마다 직선. 관리자 3페이지에서 고친다 (game.js DEFAULT_SCORE_TABLE 설명 참고)
+  scoreTable: DEFAULT_SCORE_TABLE,
+  askName: true, // START 전에 도전자 이름을 받는다 (이름 없이 Enter 면 ㅇㅇㅇ)
+  // SpikerBox 채널(1|2), 휴식 RMS(영점, 거른 신호 기준), 영점 위 여유, 전원 주파수, 노치 사용, 고역 통과 Hz (0 = 끄기)
+  emg: { channel: 1, restRms: 0, filtered: true, margin: 1.5, mainsHz: 60, notch: true, highpassHz: 80 },
   portRoles: {}, // { [path]: 'spikerbox' | 'start' }, 없는 path는 자동 판별
   fullscreen: true, // 앱을 켤 때 전체화면(kiosk)으로 시작할지
 };
@@ -65,6 +67,13 @@ function clampNum(v, min, max, def) {
   return Math.max(min, Math.min(max, n));
 }
 
+// v2.1.7 의 보정계수·곡선 → 같은 모양의 점수표. 기본값(176 · 0.6)이거나 없으면 기본 표
+function tableFromCalibration(cal, curve) {
+  const c = Number(cal), k = curve === undefined ? 0.6 : Number(curve);
+  if (!(c > 0) || (c === 176 && k === 0.6) || c === 1) return DEFAULT_SCORE_TABLE.map((p) => p.slice());
+  return cleanScoreTable(DEFAULT_SCORE_TABLE.map(([st]) => [st, toScore(st, c, k > 0 && k <= 1 ? k : 1)])) || DEFAULT_SCORE_TABLE.map((p) => p.slice());
+}
+
 function normalizeSettings(raw) {
   const s = raw && typeof raw === 'object' ? raw : {};
   // v1 설정은 {p1, p2} 객체였다 → p1 값을 가져온다
@@ -76,15 +85,19 @@ function normalizeSettings(raw) {
       if (s.portRoles[k] === 'spikerbox' || s.portRoles[k] === 'start') portRoles[k] = s.portRoles[k];
     });
   }
-  // v2.1.6 까지는 거르지 않은 RMS 기준이라 영점·보정이 맞지 않는다 → 영점은 지우고, 예전 기본값(1)이던 보정은 새 기본값으로
+  // v2.1.6 까지는 거르지 않은 RMS 기준이라 영점이 맞지 않는다 → 지운다
   const old = s.emg && typeof s.emg === 'object' && !emg.filtered;
   return {
-    calibration: old && Number(cal) === 1 ? DEFAULT_SETTINGS.calibration : clampNum(cal, 0.001, 100000, DEFAULT_SETTINGS.calibration),
-    scoreCurve: clampNum(s.scoreCurve, 0.2, 1, DEFAULT_SETTINGS.scoreCurve),
+    scoreTable: cleanScoreTable(s.scoreTable) || tableFromCalibration(old ? null : cal, s.scoreCurve),
+    askName: typeof s.askName === 'boolean' ? s.askName : DEFAULT_SETTINGS.askName,
     emg: {
       channel: Number(emg.channel) === 2 ? 2 : 1,
       restRms: old ? 0 : clampNum(emg.restRms, 0, 100000, 0),
       filtered: true,
+      margin: clampNum(emg.margin, 0, 1000, DEFAULT_SETTINGS.emg.margin),
+      mainsHz: Number(emg.mainsHz) === 50 ? 50 : 60,
+      notch: typeof emg.notch === 'boolean' ? emg.notch : true,
+      highpassHz: clampNum(emg.highpassHz, 0, 1000, DEFAULT_SETTINGS.emg.highpassHz),
     },
     portRoles,
     fullscreen: typeof s.fullscreen === 'boolean' ? s.fullscreen : DEFAULT_SETTINGS.fullscreen,

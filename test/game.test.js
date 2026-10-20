@@ -6,7 +6,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Game, toScore } = require('../src/main/game');
+const { Game, toScore, scoreFromTable, scoreOf, cleanScoreTable, DEFAULT_SCORE_TABLE } = require('../src/main/game');
 const hall = require('../src/main/hall');
 const { Store, normalizeSettings } = require('../src/main/store');
 
@@ -219,7 +219,10 @@ test('v2.0.x 파일 옮기기: 명예의 전당 이름은 살리고, 나머지 �
 
 console.log('저장');
 
-const DEFAULTS = { calibration: 176, scoreCurve: 0.6, emg: { channel: 1, restRms: 0, filtered: true }, portRoles: {}, fullscreen: true };
+const DEFAULTS = {
+  scoreTable: DEFAULT_SCORE_TABLE, askName: true,
+  emg: { channel: 1, restRms: 0, filtered: true, margin: 1.5, mainsHz: 60, notch: true, highpassHz: 80 }, portRoles: {}, fullscreen: true,
+};
 
 test('저장 후 다시 읽어도 유지 (앱 재시작 흉내), 손상 파일은 기본값', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'punch-'));
@@ -249,21 +252,47 @@ test('저장 후 다시 읽어도 유지 (앱 재시작 흉내), 손상 파일�
 
 test('설정값 범위 정리, v1 설정(calibration {p1,p2}) 이전', () => {
   assert.deepStrictEqual(normalizeSettings({ calibration: 'abc', fullscreen: 'yes' }), DEFAULTS);
-  assert.deepStrictEqual(normalizeSettings({ calibration: { p1: 2, p2: 3 } }), { ...DEFAULTS, calibration: 2 });
+  assert.deepStrictEqual(normalizeSettings({ calibration: { p1: 2, p2: 3 } }).scoreTable.map((p) => p[0]), DEFAULT_SCORE_TABLE.map((p) => p[0]));
   const s = normalizeSettings({ calibration: -1, emg: { channel: 9, restRms: -4 }, portRoles: { a: 'start', b: 'x', c: 'spikerbox' } });
-  assert.strictEqual(s.calibration, 0.001);
-  assert.deepStrictEqual(s.emg, { channel: 1, restRms: 0, filtered: true });
+  assert.deepStrictEqual(s.emg, { ...DEFAULTS.emg });
   assert.deepStrictEqual(s.portRoles, { a: 'start', c: 'spikerbox' });
 });
 
-test('v2.1.6 이전 설정: 거르지 않은 영점은 지우고, 예전 기본 보정(1)은 새 기본값으로', () => {
+test('예전 설정 이전: 거르지 않은 영점은 지우고, 보정계수·곡선은 같은 모양의 점수표로', () => {
   const old = normalizeSettings({ calibration: 1, emg: { channel: 1, restRms: 32.4 } });
-  assert.strictEqual(old.calibration, 176);
+  assert.deepStrictEqual(old.scoreTable, DEFAULT_SCORE_TABLE);
   assert.strictEqual(old.emg.restRms, 0);
-  assert.strictEqual(normalizeSettings({ calibration: 3, emg: { restRms: 9 } }).calibration, 3); // 직접 바꾼 보정은 유지
-  const now = normalizeSettings({ calibration: 1, emg: { channel: 2, restRms: 2.5, filtered: true } });
-  assert.deepStrictEqual([now.calibration, now.emg.restRms], [1, 2.5]);
-  assert.strictEqual(normalizeSettings({ scoreCurve: 5 }).scoreCurve, 1);
+  const v217 = normalizeSettings({ calibration: 176, scoreCurve: 0.6, emg: { channel: 2, restRms: 2.5, filtered: true } });
+  assert.deepStrictEqual([v217.scoreTable, v217.emg.restRms, v217.emg.channel], [DEFAULT_SCORE_TABLE, 2.5, 2]);
+  const custom = normalizeSettings({ calibration: 300, scoreCurve: 1, emg: { filtered: true } });
+  assert.deepStrictEqual(custom.scoreTable.find((p) => p[0] === 10), [10, 3000]); // 직접 바꾼 보정은 표로 옮긴다
+  assert.ok(!('calibration' in custom));
+  assert.strictEqual(normalizeSettings({ askName: false }).askName, false);
+  assert.strictEqual(normalizeSettings({ emg: { mainsHz: 50, notch: false, highpassHz: -3, margin: 'x' } }).emg.mainsHz, 50);
+  assert.deepStrictEqual(normalizeSettings({ emg: { mainsHz: 50, notch: false, highpassHz: -3, margin: 'x' } }).emg, { ...DEFAULTS.emg, mainsHz: 50, notch: false, highpassHz: 0 });
+});
+
+test('점수표: 구간마다 직선, 첫 점 아래는 0 에서, 마지막 점 위는 그대로, 표 정리', () => {
+  const t = [[0, 0], [10, 1000], [20, 5000]];
+  assert.strictEqual(scoreFromTable(5, t), 500);
+  assert.strictEqual(scoreFromTable(15, t), 3000); // 10~20 구간은 세기 1 당 400점
+  assert.strictEqual(scoreFromTable(99, t), 5000);
+  assert.strictEqual(scoreFromTable(-3, t), 0);
+  assert.strictEqual(scoreFromTable(2, [[4, 800], [8, 900]]), 400);
+  assert.deepStrictEqual(cleanScoreTable([[20, 99999], ['x', 1], [5, 100], [5, 200], [0, -4]]), [[0, 0], [5, 100], [20, 9999]]);
+  assert.strictEqual(cleanScoreTable([[1, 1]]), null);
+  assert.strictEqual(scoreOf(31, { scoreTable: DEFAULT_SCORE_TABLE }), 7000);
+  assert.strictEqual(scoreOf(10, { calibration: 2 }), 20); // 표가 없으면 보정계수 (예전 방식)
+  const { g } = makeGame({ scoreTable: t });
+  g.start(0);
+  g.sample('p1', 15, 100);
+  assert.deepStrictEqual([g.snapshot().p1.score, g.snapshot().p1.rawMax], [3000, 15]);
+});
+
+test('이름 넣은 기록: 이름이 남고 결과에 id·이름이 온다, 빈 이름은 ㅇㅇㅇ', () => {
+  const r = hall.addResult([], 5000, D, '  홍길동 ');
+  assert.deepStrictEqual([r.records[0].name, r.name, r.rank, r.id], ['홍길동', '홍길동', 1, r.records[0].id]);
+  assert.strictEqual(hall.addResult([], 5000, D, '').records[0].name, 'ㅇㅇㅇ');
 });
 
 test('점수 곡선: 1 이면 직선, 0.6 이면 높은 점수일수록 더 많은 힘이 든다', () => {
@@ -289,6 +318,18 @@ test('전원 잡음 필터: 60 Hz 와 배수는 거의 없애고, 근육 대역(
   for (const hz of [60, 180, 300]) assert.ok(rms(sine(hz)) < 7, hz + ' Hz ' + rms(sine(hz)));
   for (const hz of [130, 240, 360]) assert.ok(rms(sine(hz)) > 40, hz + ' Hz ' + rms(sine(hz)));
   assert.ok(rms(() => 0) < 0.01); // 직류(512)만 있으면 0
+  // 설정: 50 Hz 지역, 노치 끄기, 고역 끄기
+  const pass = (opts, hz) => {
+    const f = new EmgFilter(10000, opts);
+    const y = f.process(Array.from({ length: 20000 }, (_, i) => 512 + 100 * Math.sin((2 * Math.PI * hz * i) / 10000))).slice(10000);
+    const m = y.reduce((a, b) => a + b, 0) / y.length;
+    return Math.sqrt(y.reduce((a, b) => a + (b - m) ** 2, 0) / y.length);
+  };
+  assert.ok(pass({ mainsHz: 50 }, 50) < 7 && pass({ mainsHz: 50 }, 150) < 7);
+  assert.ok(pass({ notch: false }, 180) > 60);
+  assert.ok(pass({ notch: false, highpassHz: 0 }, 30) > 69);
+  const off = new EmgFilter(10000, { notch: false, highpassHz: 0 });
+  assert.deepStrictEqual(off.process([512, 513]), [512, 513]); // 둘 다 끄면 그대로
 });
 
 test('v1 명예의 전당 파일(player 있음)을 읽으면 player 는 버린다', () => {
@@ -407,6 +448,7 @@ test('strengthOf', () => {
   assert.ok(Math.abs(strengthOf(35, 2.2) - 31.3) < 1e-9); // 영점 + 여유 1.5
   assert.strictEqual(strengthOf(3.5, 2.2), 0); // 쉴 때 흔들림은 0점
   assert.ok(Math.abs(toScore(strengthOf(35, 2.2), 176, 0.6) - 7000) < 30);
+  assert.strictEqual(strengthOf(10, 2, 0), 8);
 });
 
 test('RestMeter 는 3초 평균', () => {
@@ -660,9 +702,9 @@ test('녹화: 100 ms 구간마다 CSV 한 줄, 원시값은 .raw 에 이어 쓰�
   assert.ok(csv[0].startsWith('# version: "9.9.9"'));
   const rows = csv.slice(csv.indexOf(HEADER) + 1).filter(Boolean);
   assert.deepStrictEqual(rows, [
-    '100,최대,1.63,9,0.5,1.1,2,0.6,1,512,510,514,3,0,idle',
-    '200,,,,,1.1,2,0.6,,,,,0,3,idle',
-    '300,,0,0,0,1.1,2,0.6,0,500,500,500,1,3,measuring',
+    '100,최대,1.63,9,0.5,1.1,1,512,510,514,3,0,idle',
+    '200,,,,,1.1,,,,,0,3,idle',
+    '300,,0,0,0,1.1,0,500,500,500,1,3,measuring',
   ]);
   const raw = fs.readFileSync(r.lastFile.replace(/\.csv$/, '.raw'));
   assert.deepStrictEqual([0, 1, 2, 3].map((i) => raw.readInt16LE(i * 2)), [510, 514, 512, 500]);

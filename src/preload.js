@@ -24,5 +24,9 @@ contextBridge.exposeInMainWorld('api', {
   recStop: () => ipcRenderer.invoke('rec:stop'),
   recLabel: (label) => ipcRenderer.invoke('rec:label', label),
   openRecordings: () => ipcRenderer.invoke('rec:open'),
+  setName: (name, startNow) => ipcRenderer.invoke('name:set', name, startNow),
+  cancelName: () => ipcRenderer.invoke('name:cancel'),
+  exportSettings: () => ipcRenderer.invoke('settings:export'),
+  importSettings: () => ipcRenderer.invoke('settings:import'),
   quit: () => ipcRenderer.invoke('app:quit'),
 });

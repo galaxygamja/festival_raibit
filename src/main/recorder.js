@@ -8,7 +8,7 @@ const path = require('path');
 
 const MAX_MS = 30 * 60 * 1000; // 잊고 켜 두어도 30분이면 멈춘다
 const LABELS = ['', '쉼', '약하게', '중간', '최대'];
-const HEADER = 't_ms,label,rms,rms_raw,strength,rest_rms,calibration,curve,score,mean,min,max,n,raw_start,phase';
+const HEADER = 't_ms,label,rms,rms_raw,strength,rest_rms,score,mean,min,max,n,raw_start,phase';
 
 function stamp(d) {
   const p = (n) => String(n).padStart(2, '0');
@@ -96,8 +96,6 @@ class Recorder {
       w ? num(w.rmsRaw, 2) : '',
       w ? num(w.strength, 2) : '',
       num(info.restRms, 2),
-      num(info.calibration),
-      num(info.curve),
       w ? num(info.score) : '',
       n ? num(this._sum / n, 1) : '',
       n ? this._min : '',
