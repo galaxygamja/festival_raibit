@@ -944,4 +944,63 @@ test('Result WAV respects volume, mute, restart, and playback rejection', () => 
   assert.strictEqual(wav.toString('ascii', 8, 12), 'WAVE');
 });
 
+test('Combined strength sound layers charging beam and motor without duplicating voices', () => {
+  const vm = require('vm');
+  const oscillators = [], gains = [], timers = [];
+  function param() {
+    return { value: 0, setValueAtTime(v) { this.value = v; }, setTargetAtTime(v) { this.value = v; } };
+  }
+  function node() { return { connect() {}, disconnect() {}, gain: param(), frequency: param(), detune: param(), Q: param() }; }
+  let contexts = 0;
+  class AudioContext {
+    constructor() { contexts++; this.currentTime = 0; this.state = 'running'; this.destination = {}; }
+    createGain() { const n = node(); gains.push(n); return n; }
+    createOscillator() {
+      const n = { ...node(), starts: 0, stops: 0, start() { this.starts++; }, stop() { this.stops++; }, setPeriodicWave() { this.periodic = true; } };
+      oscillators.push(n); return n;
+    }
+    createWaveShaper() { return node(); }
+    createDynamicsCompressor() { return { ...node(), threshold: param(), ratio: param() }; }
+    createDelay() { return { ...node(), delayTime: param() }; }
+    createBiquadFilter() { return node(); }
+    createPeriodicWave() { return {}; }
+  }
+  const sandbox = { window: {}, AudioContext, console, setTimeout: fn => timers.push(fn) };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/renderer/sound.js'), 'utf8'), sandbox);
+  const sound = sandbox.window.Sound;
+  sound.configure({ on: true, volume: 0.4 });
+  sound.power(0.5, 0.25);
+  assert.strictEqual(contexts, 1);
+  assert.strictEqual(oscillators.length, 7);
+  assert.strictEqual(oscillators.filter(n => n.periodic).length, 2);
+  const motor = oscillators.find(n => n.type === 'sawtooth');
+  const rotor = oscillators.find(n => n.type === 'sine');
+  assert.ok(Math.abs(motor.frequency.value - 90 * Math.pow(10, 0.25)) < 1e-8);
+  assert.strictEqual(rotor.frequency.value, 14 + 65 * 0.25);
+  sound.power(1, 0.3);
+  const beamFrequency = oscillators[0].frequency.value;
+  sound.power(1, 0.8); // The beam is saturated, but the motor must still rise.
+  assert.strictEqual(oscillators[0].frequency.value, beamFrequency);
+  assert.ok(Math.abs(motor.frequency.value - 90 * Math.pow(10, 0.8)) < 1e-8);
+  assert.strictEqual(oscillators.length, 7);
+  sound.power(0, 0);
+  assert.strictEqual(gains[5].gain.value, 0); // Beam output.
+  assert.strictEqual(gains[gains.length - 1].gain.value, 0); // Motor output.
+  sound.configure({ on: true, volume: 0.2 });
+  assert.strictEqual(gains[0].gain.value, 0.2); // Shared master volume.
+  sound.power(null);
+  timers.splice(0).forEach(fn => fn());
+  assert.ok(oscillators.every(n => n.stops === 1));
+  sound.configure({ on: false, volume: 0.2 });
+  sound.power(0.5, 0.5);
+  assert.strictEqual(oscillators.length, 7);
+  sound.configure({ on: true, volume: 0.2 });
+  sound.power(0.5, 0.5);
+  assert.strictEqual(contexts, 1);
+  assert.strictEqual(oscillators.length, 14);
+  sound.configure({ on: false, volume: 0.2 });
+  timers.splice(0).forEach(fn => fn());
+  assert.ok(oscillators.every(n => n.starts === 1 && n.stops === 1));
+});
+
 console.log(`\n${passed}개 통과`);

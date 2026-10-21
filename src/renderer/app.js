@@ -253,7 +253,7 @@
       // 현재 힘 소리는 화면 숫자와 같은 부드러운 값을 따라간다 (점수 상한 = 1)
       if (state.game.phase === 'measuring') {
         var top = (state.settings.score && state.settings.score.top) || 7000;
-        Sound.power(Math.min(1, shown.p1 / top));
+        Sound.power(Math.min(1, shown.p1 / top), Math.min(1, shown.p1 / MAX_SCORE));
       }
     }
     requestAnimationFrame(frame);

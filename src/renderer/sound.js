@@ -171,7 +171,7 @@
     },
   };
 
-  // 현재 힘: 충전 빔. 근음·옥타브가 번갈아 울리고, 힘(0~1)에 따라 반음씩 3옥타브를 오르내린다.
+  // 현재 힘: 원본의 8비트 충전 빔 + 점수에 따라 회전하는 모터음. 두 층 모두 기존 master 음량을 따른다.
   function Beam() {
     var c = ac(), out = c.createGain(); out.gain.value = 0; out.connect(bus);
     var o1 = voice(c, 'p25'), o2 = voice(c, 'p12'), o3 = voice(c, 'triangle');
@@ -182,25 +182,43 @@
     lfo.connect(l1); l1.connect(g1.gain); lfo.connect(l2); l2.connect(g2.gain);
     o1.connect(g1); o2.connect(g2); o3.connect(g3);
     [g1, g2, g3].forEach(function (g) { g.connect(out); });
-    var nodes = [o1, o2, o3, lfo];
+    // juhyun5801 모터음: 톱니파 + 약간 어긋난 사각파 + 회전 진폭 변조.
+    // 원본 충전음과 합칠 때 과도하게 커지지 않도록 모터 출력을 낮춘다.
+    var motor = c.createOscillator(), second = c.createOscillator(), rotor = c.createOscillator();
+    var motorLevel = c.createGain(), secondLevel = c.createGain(), depth = c.createGain();
+    var filter = c.createBiquadFilter(), motorOut = c.createGain();
+    motor.type = 'sawtooth'; second.type = 'square'; second.detune.value = 7; rotor.type = 'sine';
+    motorLevel.gain.value = 0.55; secondLevel.gain.value = 0.18; depth.gain.value = 0.22;
+    filter.type = 'lowpass'; filter.Q.value = 1.1; motorOut.gain.value = 0;
+    motor.connect(motorLevel); second.connect(secondLevel); secondLevel.connect(motorLevel);
+    rotor.connect(depth); depth.connect(motorLevel.gain);
+    motorLevel.connect(filter); filter.connect(motorOut); motorOut.connect(pre);
+    var nodes = [o1, o2, o3, lfo, motor, second, rotor];
     nodes.forEach(function (n) { n.start(); });
     var last = -1;
-    this.set = function (p) {
+    this.set = function (p, motorRatio) {
       var t = c.currentTime, m = Math.round(40 + p * 36);
       if (m !== last) {
         last = m;
         o1.frequency.setValueAtTime(N(m), t); o2.frequency.setValueAtTime(N(m + 12), t); o3.frequency.setValueAtTime(N(m - 12), t);
       }
       lfo.frequency.setTargetAtTime(10 + p * 14, t, 0.05);
-      out.gain.setTargetAtTime(p < 0.01 ? 0 : 0.05 + p * 0.13, t, 0.05);
+      out.gain.setTargetAtTime(p < 0.01 ? 0 : (0.05 + p * 0.13) * 0.65, t, 0.05);
+      var frequency = 90 * Math.pow(10, motorRatio);
+      motor.frequency.setTargetAtTime(frequency, t, 0.04);
+      second.frequency.setTargetAtTime(frequency, t, 0.04);
+      rotor.frequency.setTargetAtTime(14 + 65 * motorRatio, t, 0.04);
+      filter.frequency.setTargetAtTime(650 + 4200 * motorRatio, t, 0.04);
+      motorOut.gain.setTargetAtTime(motorRatio ? (0.4 + 0.2 * Math.sqrt(motorRatio)) * 0.15 : 0, t, 0.025);
     };
     this.stop = function () {
       out.gain.setTargetAtTime(0, c.currentTime, 0.04);
-      setTimeout(function () { nodes.forEach(function (n) { n.stop(); }); out.disconnect(); }, 400);
+      motorOut.gain.setTargetAtTime(0, c.currentTime, 0.01);
+      setTimeout(function () { nodes.forEach(function (n) { n.stop(); }); out.disconnect(); motorOut.disconnect(); }, 400);
     };
   }
 
-  var beam = null, lastP = -1;
+  var beam = null, lastP = -1, lastMotor = -1;
 
   window.Sound = {
     play: function (name) {
@@ -208,15 +226,17 @@
       try { SOUNDS[name](); } catch (e) { console.warn('sound', name, e); }
     },
     // 측정 중 현재 힘 (0~1). null 이면 끈다.
-    power: function (p) {
+    power: function (p, motorRatio) {
       if (p == null || !enabled) {
         if (beam) { beam.stop(); beam = null; }
         return;
       }
-      if (!beam) { beam = new Beam(); lastP = -1; }
-      if (Math.abs(p - lastP) < 0.003) return;
-      lastP = p;
-      beam.set(p);
+      p = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
+      motorRatio = motorRatio == null ? p : Number.isFinite(motorRatio) ? Math.max(0, Math.min(1, motorRatio)) : 0;
+      if (!beam) { beam = new Beam(); lastP = lastMotor = -1; }
+      if (Math.abs(p - lastP) < 0.003 && Math.abs(motorRatio - lastMotor) < 0.003) return;
+      lastP = p; lastMotor = motorRatio;
+      beam.set(p, motorRatio);
     },
     configure: function (opts) {
       var on = !opts || opts.on !== false;
