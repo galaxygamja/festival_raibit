@@ -728,15 +728,57 @@
     });
   }
 
+  // ───────────────────────── 확인 창 (window.confirm 대신, #stage 안에 그려서 화면 배율을 따른다) ─────────────────────────
+  // askConfirm({ title, message, ok, cancel, danger }) → Promise<boolean>. Enter: 확인, Esc·바깥 클릭: 취소
+  var askDone = null; // 열려 있으면 닫는 함수
+
+  function askConfirm(o) {
+    if (askDone) askDone(false);
+    releaseSimKeys();
+    var prev = document.activeElement;
+    $('ask-title').textContent = o.title || '';
+    $('ask-msg').textContent = o.message || '';
+    $('ask-ok').textContent = o.ok || '확인';
+    $('ask-cancel').textContent = o.cancel || '취소';
+    $('ask-modal').querySelector('.ask-box').classList.toggle('danger', !!o.danger);
+    $('ask-modal').hidden = false;
+    // 지우기·종료처럼 되돌릴 수 없는 일은 취소 버튼에 먼저 포커스를 둔다
+    (o.danger ? $('ask-cancel') : $('ask-ok')).focus();
+    return new Promise(function (resolve) {
+      askDone = function (yes) {
+        askDone = null;
+        $('ask-modal').hidden = true;
+        if (prev && prev.focus && document.contains(prev)) prev.focus();
+        resolve(yes);
+      };
+    });
+  }
+
+  $('ask-ok').addEventListener('click', function () { if (askDone) askDone(true); });
+  $('ask-cancel').addEventListener('click', function () { if (askDone) askDone(false); });
+  $('ask-modal').addEventListener('click', function (e) { if (e.target === this && askDone) askDone(false); });
+  $('ask-modal').addEventListener('keydown', function (e) {
+    e.stopPropagation(); // 관리자 화면 Esc, 시뮬레이션 키로 새지 않게
+    if (!askDone || e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape') { e.preventDefault(); askDone(false); }
+    else if (e.key === 'Enter') { e.preventDefault(); askDone(true); }
+    else if (e.key === 'Tab') { // 포커스는 두 버튼 사이에서만 돈다
+      e.preventDefault();
+      (document.activeElement === $('ask-ok') ? $('ask-cancel') : $('ask-ok')).focus();
+    }
+  });
+
   function deleteRecord(id) {
     var list = visibleRecords(), i = -1;
     for (var k = 0; k < list.length; k++) if (list[k].id === id) i = k;
     if (i < 0) return;
     var d = list[i];
-    if (!window.confirm((i + 1) + '위 ' + d.name + ' (' + d.score + '점) 기록을 지울까요?')) return;
-    api.deleteRecords([id]).then(function (ok) {
-      recordsMsg(ok ? '기록을 지웠습니다.' : '기록 삭제에 실패했습니다.', ok);
-      renderedHallKey = '';
+    askConfirm({ title: (i + 1) + '위 ' + d.name + ' (' + d.score + '점) 기록을 지울까요?', ok: '지우기', danger: true }).then(function (yes) {
+      if (!yes) return;
+      api.deleteRecords([id]).then(function (ok) {
+        recordsMsg(ok ? '기록을 지웠습니다.' : '기록 삭제에 실패했습니다.', ok);
+        renderedHallKey = '';
+      });
     });
   }
 
@@ -770,10 +812,12 @@
   });
   $('btn-reset-records').addEventListener('click', function () {
     var n = state ? state.recordsTotal || 0 : 0;
-    if (!window.confirm('기록 ' + n + '개(명예의 전당 포함)를 모두 지울까요?\n(지우기 전 파일은 데이터 폴더에 백업됩니다)')) return;
-    api.resetRecords().then(function (ok) {
-      recordsMsg(ok ? '기록을 모두 지웠습니다.' : '기록 삭제에 실패했습니다.', ok);
-      renderedHallKey = '';
+    askConfirm({ title: '기록 ' + n + '개(명예의 전당 포함)를 모두 지울까요?', message: '지우기 전 파일은 데이터 폴더에 백업됩니다.', ok: '모두 지우기', danger: true }).then(function (yes) {
+      if (!yes) return;
+      api.resetRecords().then(function (ok) {
+        recordsMsg(ok ? '기록을 모두 지웠습니다.' : '기록 삭제에 실패했습니다.', ok);
+        renderedHallKey = '';
+      });
     });
   });
   $('btn-zero').addEventListener('click', function () { if (api.zeroEmg) api.zeroEmg(); });
@@ -784,7 +828,7 @@
   $('btn-reconnect').addEventListener('click', function () { api.reconnect(); });
   $('sim-toggle').addEventListener('change', function (e) { api.setSim(e.target.checked); });
   $('btn-quit').addEventListener('click', function () {
-    if (window.confirm('앱을 종료할까요?')) api.quit();
+    askConfirm({ title: '앱을 종료할까요?', ok: '종료', danger: true }).then(function (yes) { if (yes) api.quit(); });
   });
   $('rows').addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.isComposing) saveRecords();
@@ -1315,6 +1359,11 @@
   }
 
   window.addEventListener('keydown', function (e) {
+    // 확인 창이 떠 있으면 (포커스가 창 밖으로 나갔어도) Esc 는 취소만 하고 다른 단축키·시뮬레이션 키는 받지 않는다
+    if (askDone) {
+      if (e.key === 'Escape') { e.preventDefault(); askDone(false); }
+      return;
+    }
     // 전체화면 ↔ 창 모드 (관중 화면·관리자 화면 어디서나)
     if (e.key === 'F11' || (isMac && e.code === 'KeyF' && e.ctrlKey && e.metaKey)) {
       e.preventDefault();

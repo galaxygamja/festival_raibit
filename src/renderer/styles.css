@@ -212,6 +212,24 @@ body.mac-titlebar #main { padding-top: 44px; }
 #name-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 4, 3, 0.72); z-index: 20; font-family: 'Do Hyeon', sans-serif; color: #F3E6E1; }
 #name-modal[hidden] { display: none; }
 #name-modal input { user-select: text; }
+
+/* 확인 창 (window.confirm 대신) */
+#ask-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 4, 3, 0.72); z-index: 30; font-family: 'Do Hyeon', sans-serif; color: #F3E6E1; }
+#ask-modal[hidden] { display: none; }
+.ask-box { box-sizing: border-box; width: 680px; word-break: keep-all; padding: 34px 40px 30px; border-radius: 26px; background: #1C0F0D; border: 3px solid #FFB21E; box-shadow: 0 0 40px rgba(255,178,30,0.35); display: flex; flex-direction: column; gap: 14px; animation: pop 0.18s ease-out; }
+.ask-box.danger { border-color: #FF8A7A; box-shadow: 0 0 40px rgba(255,74,28,0.3); }
+.ask-title { font-size: 38px; line-height: 1.2; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.4); }
+.ask-box.danger .ask-title { color: #FF8A7A; text-shadow: 0 0 14px rgba(255,74,28,0.35); }
+.ask-msg { font-size: 24px; line-height: 1.35; color: #C9B3AC; }
+.ask-msg:empty { display: none; }
+.ask-btns { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+.ask-btn { height: 58px; min-width: 130px; padding: 0 28px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 26px; cursor: pointer; white-space: nowrap; }
+.ask-btn:hover { background: #2A1714; }
+.ask-btn.ok { border-color: #FFB21E; background: #FFB21E; color: #1A0D0B; box-shadow: 0 0 22px rgba(255,178,30,0.4); }
+.ask-btn.ok:hover { background: #FFC24A; }
+.ask-box.danger .ask-btn.ok { border-color: #FF4A1C; background: #FF4A1C; color: #1A0D0B; box-shadow: 0 0 22px rgba(255,74,28,0.4); }
+.ask-box.danger .ask-btn.ok:hover { background: #FF6A44; }
+.ask-btn:focus-visible { outline: 3px solid #FFD27A; outline-offset: 3px; }
 #fx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
 #celebrate { position: absolute; left: 0; right: 0; bottom: 70px; display: flex; justify-content: center; pointer-events: none; z-index: 11; font-family: 'Do Hyeon', sans-serif; }
 #celebrate[hidden] { display: none; }
