@@ -38,17 +38,23 @@ body.fullscreen #drag-bar { display: none; }
 .page-title { flex: none; margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); white-space: nowrap; }
 .page-hint { flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* macOS 관리자 화면: 창 맨 위 제목 표시줄 (창 px 고정, 무대 확대와 무관). 높이는 app.js TITLEBAR_H, 신호등 위치는 main.js 와 맞춘다 */
+/* 관리자 화면: 창 맨 위 제목 표시줄 (창 px 고정, 무대 확대와 무관). 높이는 app.js TITLEBAR_H, 신호등·창 버튼 높이는 main.js 와 맞춘다 */
 #titlebar { display: none; }
-body.mac-titlebar.admin-open #drag-bar { display: none; }
-body.mac-titlebar.admin-open #titlebar {
+body.app-titlebar.admin-open #drag-bar { display: none; }
+body.app-titlebar.admin-open #titlebar {
   position: fixed; left: 0; right: 0; top: 0; height: 40px; z-index: 100; box-sizing: border-box;
-  display: flex; align-items: center; padding: 0 10px 0 84px;
+  display: flex; align-items: center; padding: 0 10px;
   background: #1C0F0D; border-bottom: 1px solid #3A2420;
   font-family: 'Do Hyeon', sans-serif;
   -webkit-app-region: drag;
 }
+/* macOS: 왼쪽 신호등 버튼 자리를 비운다 */
+body.mac-titlebar.admin-open #titlebar { padding-left: 84px; }
 body.mac-titlebar.admin-open.fullscreen #titlebar { padding-left: 16px; }
+/* Windows: 제목·버튼을 왼쪽에 붙이고, 오른쪽 창 버튼(최소화·최대화·닫기, 46px × 3) 자리를 비운다 */
+body.win-titlebar.admin-open #titlebar { padding: 0 148px 0 16px; }
+body.win-titlebar.admin-open.fullscreen #titlebar { padding-right: 10px; }
+body.win-titlebar #titlebar .page-hint { order: 1; text-align: right; }
 #titlebar .page-head { flex: 1; min-width: 0; gap: 8px; }
 #titlebar .page-head[hidden] { display: none; }
 #titlebar .page-title { font-size: 19px; text-shadow: none; margin-right: 6px; }

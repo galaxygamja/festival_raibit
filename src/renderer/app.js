@@ -23,11 +23,11 @@
   // 가로가 세로의 2.4배를 넘으면 그 이상은 늘리지 않고 좌우를 비운다.
   var DESIGN_W = 1440, DESIGN_H = 900, MAX_RATIO = 2.4;
   var stageW = DESIGN_W, stageH = DESIGN_H;
-  // macOS 관리자 화면에서는 창 맨 위 제목 표시줄(#titlebar, 창 px) 아래 영역에 무대를 맞춘다
+  // 관리자 화면에서는 창 맨 위 제목 표시줄(#titlebar, 창 px) 아래 영역에 무대를 맞춘다
   var TITLEBAR_H = 40;
   function fit() {
     var stage = $('stage');
-    var top = document.body.classList.contains('mac-titlebar') && document.body.classList.contains('admin-open') ? TITLEBAR_H : 0;
+    var top = document.body.classList.contains('app-titlebar') && document.body.classList.contains('admin-open') ? TITLEBAR_H : 0;
     var w = window.innerWidth, h = window.innerHeight - top;
     var s = Math.min(w / DESIGN_W, h / DESIGN_H);
     stageH = h / s;
@@ -662,11 +662,12 @@
   $('name-shortcut').textContent = isMac ? 'Control + F' : 'Ctrl + F';
   $('guide-shortcut').textContent = isMac ? 'Control + /' : 'Ctrl + /';
 
-  // macOS: 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
+  // 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
+  // macOS 는 신호등 오른쪽에서 버튼을 오른쪽 끝으로, Windows 는 제목·버튼을 왼쪽에 붙이고 오른쪽은 창 버튼 자리로 둔다.
+  document.body.classList.add('app-titlebar', isMac ? 'mac-titlebar' : 'win-titlebar');
+  pageHeads.forEach(function (head) { head.hidden = true; $('titlebar').appendChild(head); });
+  // 빈 곳 더블클릭은 macOS 처럼 창 확대 (시스템 설정의 '제목 막대를 이중 클릭하면'을 따른다). Windows 는 끌기 영역이 직접 처리한다.
   if (isMac) {
-    document.body.classList.add('mac-titlebar');
-    pageHeads.forEach(function (head) { head.hidden = true; $('titlebar').appendChild(head); });
-    // 빈 곳 더블클릭은 macOS 처럼 창 확대 (시스템 설정의 '제목 막대를 이중 클릭하면'을 따른다)
     $('titlebar').addEventListener('dblclick', function (e) {
       if (!e.target.closest('button')) api.titlebarDoubleClick();
     });
@@ -675,6 +676,7 @@
   function setAdminOpen(on) {
     adminOpen = on;
     document.body.classList.toggle('admin-open', on);
+    api.setAdminTitlebar(on);
     fit();
   }
 

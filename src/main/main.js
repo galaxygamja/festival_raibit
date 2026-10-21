@@ -20,6 +20,11 @@ const START_SIM = argv.includes('--sim');
 const FORCE_WINDOWED = argv.includes('--windowed');
 const FORCE_FULLSCREEN = argv.includes('--fullscreen');
 const IS_MAC = process.platform === 'darwin';
+// Windows 창 버튼: 관중 화면은 얇게, 관리자 화면은 제목 표시줄(높이 40, styles.css #titlebar)에 맞춘다
+const TITLEBAR_OVERLAY = {
+  main: { color: '#140A09', symbolColor: '#C9B3AC', height: 24 },
+  admin: { color: '#1C0F0D', symbolColor: '#C9B3AC', height: 39 },
+};
 
 if (!app.requestSingleInstanceLock()) {
   // 두 개가 뜨면 시리얼 포트를 서로 뺏으므로 하나만 실행
@@ -212,7 +217,7 @@ function createWindow(full) {
     // 제목 표시줄 없이 화면을 창 끝까지 쓴다 (macOS 신호등 버튼·Windows 창 버튼은 화면 위에 겹쳐 남김)
     titleBarStyle: 'hidden',
     // macOS 신호등 버튼은 관리자 화면 제목 표시줄(높이 40, styles.css #titlebar) 세로 가운데에 둔다
-    ...(IS_MAC ? { trafficLightPosition: { x: 16, y: 13 } } : { titleBarOverlay: { color: '#140A09', symbolColor: '#C9B3AC', height: 24 } }),
+    ...(IS_MAC ? { trafficLightPosition: { x: 16, y: 13 } } : { titleBarOverlay: TITLEBAR_OVERLAY.main }),
     show: false,
     title: 'raibitScoreboard',
     icon: ICON,
@@ -426,6 +431,10 @@ function setupIpc() {
     if (action === 'Minimize') win.minimize();
     else if (win.isMaximized()) win.unmaximize();
     else win.maximize();
+  });
+  ipcMain.handle('window:setAdminTitlebar', (_e, on) => {
+    if (IS_MAC || !win || win.isDestroyed()) return;
+    win.setTitleBarOverlay(on ? TITLEBAR_OVERLAY.admin : TITLEBAR_OVERLAY.main);
   });
   ipcMain.handle('app:quit', () => app.quit());
 }

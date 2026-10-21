@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   simKey: (key, down) => ipcRenderer.invoke('sim:key', key, down),
   toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
   titlebarDoubleClick: () => ipcRenderer.invoke('window:titlebarDoubleClick'),
+  setAdminTitlebar: (on) => ipcRenderer.invoke('window:setAdminTitlebar', !!on),
   zeroEmg: () => ipcRenderer.invoke('emg:zero'),
   setPortRole: (path, role) => ipcRenderer.invoke('serial:setRole', path, role),
   setDiag: (on) => ipcRenderer.invoke('diag:set', on),
