@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current status: v2.1.13
+## Current status: v2.1.14
 
 The v1→v2 migration (2-player Arduino contest → 1-player record mode fed by a SpikerBox) is code-complete and documented in `PLAN.md` (Phases 1–4 and checklist steps 1–10 done). **Step 11, the on-site hardware test, is partly done**: real SpikerBox/EMG scoring after 자동 보정 on the event laptop was confirmed by the user (2026-10-21). On the Windows laptop (2026-10-21) the Arduino Uno (COM7) was flashed with `arduino/start_button` via `arduino-cli` (`arduino-cli upload -p COM7 --fqbn arduino:avr:uno arduino/start_button`) and `SerialManager` classified it as the START port from its `ALIVE` lines; the user then confirmed the physical START button starting a measurement with SpikerBox force rising (2026-10-21, Desktop exe 2.1.10). Still open: macOS 222222 baud, Windows exe on site. The Windows build fails on this laptop with a winCodeSign symlink-privilege error unless run with `npx electron-builder --win portable nsis --x64 -c.win.signAndEditExecutable=false` (no rcedit, so no exe metadata edit). Update PLAN.md first if that testing changes a decision.
 

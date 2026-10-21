@@ -238,6 +238,7 @@ function createWindow(full) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      autoplayPolicy: 'no-user-gesture-required', // Arduino START 는 사용자 동작이 아니라서 소리가 막히지 않게
     },
   });
   win.once('ready-to-show', () => {
