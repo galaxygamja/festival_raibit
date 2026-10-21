@@ -2,6 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const { fileURLToPath } = require('url');
 const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog, session, systemPreferences } = require('electron');
 const { Game, scoreOf, pctOf, DEFAULT_SCORE, CURVE_PRESETS } = require('./game');
 const hall = require('./hall');
@@ -440,7 +441,7 @@ async function installMemo() {
       session: session.defaultSession,
       ipcMain,
       storeDir: path.join(root, '.electron-memos'),
-      isTrustedUrl: (url) => url.startsWith('file://') && decodeURIComponent(new URL(url).pathname).startsWith(renderer),
+      isTrustedUrl: (url) => url.startsWith('file://') && fileURLToPath(url).startsWith(renderer),
       locale: 'ko',
       repoRoot: root,
     });
