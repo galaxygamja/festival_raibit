@@ -155,7 +155,7 @@
     var nm = state.name || {};
     var who = function (n) { return n ? esc(n) + '님 · ' : ''; };
     var labels = {
-      idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '다음 경기 대기',
+      idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '&nbsp;',
       measuring: who(nm.current) + '5초 동안 힘껏 쥐세요',
       result: '&nbsp;', // 결과 화면은 위 줄 없이 점수·순위만 (줄 높이는 남겨 점수가 움직이지 않게)
     };
