@@ -1,11 +1,12 @@
 'use strict';
 
 // 경기 상태 기계. 시간은 항상 인자로 받아서(now, ms) 테스트에서 시계를 마음대로 돌릴 수 있게 한다.
-//   IDLE --start--> MEASURING --50개(0.1초 × 50 = 5초) 또는 8초--> RESULT
-//   RESULT --start--> MEASURING
+//   IDLE --start--> COUNTDOWN --2.145초 (3·2·1)--> MEASURING --50개(0.1초 × 50 = 5초) 또는 8초--> RESULT
+//   RESULT --start--> COUNTDOWN
 // 측정이 끝나면 판정 대기 없이 바로 결과. 최종 점수는 50개 값 중 최댓값. 1인 기록 모드.
 
-const PHASE = { IDLE: 'idle', MEASURING: 'measuring', RESULT: 'result' };
+const PHASE = { IDLE: 'idle', COUNTDOWN: 'countdown', MEASURING: 'measuring', RESULT: 'result' };
+const COUNTDOWN_MS = 2145; // 화면의 3·2·1 과 삐 소리(0, 0.715, 1.43초)에 맞춘다 (한 칸 0.715초)
 const SAMPLES_NEEDED = 50;
 const MEASURE_TIMEOUT_MS = 8000;
 const MAX_SCORE = 9999;
@@ -131,35 +132,42 @@ class Game {
    * @param {object} opts
    * @param {() => {calibration: number}} opts.getSettings
    * @param {(result: {score: number}) => void} [opts.onResult]
+   * @param {number} [opts.countdownMs] 0 이면 카운트다운 없이 바로 측정
    */
-  constructor({ getSettings, onResult }) {
+  constructor({ getSettings, onResult, countdownMs = COUNTDOWN_MS }) {
     this.getSettings = getSettings;
     this.onResult = onResult || (() => {});
+    this.countdownMs = countdownMs;
     this.phase = PHASE.IDLE;
     this.p1 = emptyPlayer();
     this.measureStartedAt = 0;
   }
 
-  /** START 버튼(물리 / 관리자 / 시뮬레이션). MEASURING 중에는 무시. */
+  /** 카운트다운이나 측정 중 */
+  get busy() {
+    return this.phase === PHASE.COUNTDOWN || this.phase === PHASE.MEASURING;
+  }
+
+  /** START 버튼(물리 / 관리자 / 시뮬레이션). 카운트다운·측정 중에는 무시. */
   start(now) {
-    if (this.phase === PHASE.MEASURING) return false;
-    this.phase = PHASE.MEASURING;
+    if (this.busy) return false;
+    this.phase = this.countdownMs > 0 ? PHASE.COUNTDOWN : PHASE.MEASURING;
     this.p1 = emptyPlayer();
-    this.measureStartedAt = now;
+    this.measureStartedAt = now + this.countdownMs;
     return true;
   }
 
-  /** 경기 중지 · 기록하지 않음. MEASURING 중일 때만 동작. */
+  /** 경기 중지 · 기록하지 않음. 카운트다운·측정 중일 때만 동작. */
   stop() {
-    if (this.phase !== PHASE.MEASURING) return false;
+    if (!this.busy) return false;
     this.phase = PHASE.IDLE;
     this.p1 = emptyPlayer();
     return true;
   }
 
-  /** 결과 화면을 비우고 대기로 (기록 전체 삭제 뒤). MEASURING 중에는 무시. */
+  /** 결과 화면을 비우고 대기로 (기록 전체 삭제 뒤). 카운트다운·측정 중에는 무시. */
   clear() {
-    if (this.phase === PHASE.MEASURING) return false;
+    if (this.busy) return false;
     this.phase = PHASE.IDLE;
     this.p1 = emptyPlayer();
     return true;
@@ -179,6 +187,7 @@ class Game {
   }
 
   tick(now) {
+    if (this.phase === PHASE.COUNTDOWN && now >= this.measureStartedAt) this.phase = PHASE.MEASURING;
     if (this.phase !== PHASE.MEASURING) return;
     const full = this.p1.samples >= SAMPLES_NEEDED;
     const timedOut = now - this.measureStartedAt >= MEASURE_TIMEOUT_MS;
@@ -197,6 +206,6 @@ class Game {
 }
 
 module.exports = {
-  Game, PHASE, SAMPLES_NEEDED, MEASURE_TIMEOUT_MS, MAX_SCORE, DEFAULT_CURVE, DEFAULT_SCORE_TABLE, DEFAULT_SCORE, CURVE_PRESETS,
+  Game, PHASE, COUNTDOWN_MS, SAMPLES_NEEDED, MEASURE_TIMEOUT_MS, MAX_SCORE, DEFAULT_CURVE, DEFAULT_SCORE_TABLE, DEFAULT_SCORE, CURVE_PRESETS,
   toScore, scoreFromTable, scoreOf, pctOf, cleanScoreTable, cleanScore, curvePoints, defaultScore, scoreFromLegacyTable,
 };

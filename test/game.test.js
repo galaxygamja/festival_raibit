@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  Game, toScore, scoreFromTable, scoreOf, cleanScoreTable, DEFAULT_SCORE_TABLE, DEFAULT_SCORE, curvePoints, cleanScore, scoreFromLegacyTable, pctOf,
+  Game, COUNTDOWN_MS, toScore, scoreFromTable, scoreOf, cleanScoreTable, DEFAULT_SCORE_TABLE, DEFAULT_SCORE, curvePoints, cleanScore, scoreFromLegacyTable, pctOf,
 } = require('../src/main/game');
 const { analyzeCalibration, AutoCal } = require('../src/main/calib');
 const hall = require('../src/main/hall');
@@ -43,7 +43,7 @@ function linear(ref = 9999) {
 function makeGame(settings) {
   const results = [];
   const s = settings || linear();
-  const g = new Game({ getSettings: () => s, onResult: (r) => results.push(r) });
+  const g = new Game({ getSettings: () => s, onResult: (r) => results.push(r), countdownMs: 0 });
   return { g, results, s };
 }
 
@@ -138,6 +138,28 @@ test('기준 힘 대비 % 로 점수, 0~9999 로 자름', () => {
   assert.strictEqual(g.p1.score, 501); // round(500.5)
   assert.strictEqual(toScore(-5, 1), 0);
   assert.strictEqual(toScore(6000, 2), 9999);
+});
+
+test('START 후 3·2·1 카운트다운 동안은 값을 받지 않고, 끝나면 측정 (8초 제한은 측정 시작부터)', () => {
+  const results = [];
+  const g = new Game({ getSettings: () => linear(), onResult: (r) => results.push(r) });
+  assert.ok(g.start(0));
+  assert.strictEqual(g.phase, 'countdown');
+  assert.strictEqual(g.start(500), false);
+  g.sample('p1', 5000, 500);
+  g.tick(COUNTDOWN_MS - 1);
+  assert.strictEqual(g.phase, 'countdown');
+  assert.strictEqual(g.p1.samples, 0);
+  g.tick(COUNTDOWN_MS);
+  assert.strictEqual(g.phase, 'measuring');
+  g.tick(COUNTDOWN_MS + 7999);
+  assert.strictEqual(g.phase, 'measuring');
+  g.tick(COUNTDOWN_MS + 8000);
+  assert.strictEqual(g.phase, 'result');
+  assert.ok(g.start(20000));
+  assert.ok(g.stop());
+  assert.strictEqual(g.phase, 'idle');
+  assert.strictEqual(results.length, 1);
 });
 
 console.log('자동 보정');
@@ -293,7 +315,7 @@ test('v2.0.x 파일 옮기기: 명예의 전당 이름은 살리고, 나머지 �
 console.log('저장');
 
 const DEFAULTS = {
-  score: DEFAULT_SCORE, askName: true,
+  score: DEFAULT_SCORE, askName: true, sound: { on: true, volume: 0.7 },
   emg: { channel: 1, restRms: 0, filtered: true, margin: 1.5, mainsHz: 60, notch: true, highpassHz: 80 }, portRoles: {}, fullscreen: true,
 };
 

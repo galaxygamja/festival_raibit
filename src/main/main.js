@@ -128,7 +128,7 @@ function diagPayload(t) {
 
 /** 측정 시작. 이름 받기가 켜져 있고 이름이 없으면(관리자 버튼 제외) 시작하지 않고 이름 입력창을 띄운다 */
 function requestStart(fromAdmin) {
-  if (game.phase === 'measuring' || autocal.running) return;
+  if (game.busy || autocal.running) return;
   if (!fromAdmin && settings.askName && !nextName) {
     namePrompt = true;
     namePromptSeq++;
@@ -341,7 +341,7 @@ function setupIpc() {
     return !lastSaveError;
   });
   ipcMain.handle('records:reset', () => {
-    if (game.phase === 'measuring') return false;
+    if (game.busy) return false;
     try {
       store.resetRecords();
       records = [];
@@ -385,7 +385,7 @@ function setupIpc() {
   ipcMain.handle('emg:zero', () => { rest.start(now()); zeroStartedAt = now(); push(); });
   // 자동 보정: mode = full (쉼 → 최대 힘, 신호 설정 전부 + 기준 힘) | noise (쉼만, 전원·영점·여유) | max (최대 힘만, 기준 힘)
   ipcMain.handle('calib:start', (_e, mode) => {
-    if (game.phase === 'measuring') return false;
+    if (game.busy) return false;
     rest.stop();
     autocal.start(mode, now());
     push();
