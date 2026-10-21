@@ -154,11 +154,10 @@
     var res = resultInfo(phase === 'result' ? state.result : null);
     var nm = state.name || {};
     var who = function (n) { return n ? esc(n) + '님 · ' : ''; };
-    var resultName = phase === 'result' && state.result ? state.result.name : null;
     var labels = {
       idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '다음 경기 대기',
       measuring: who(nm.current) + '5초 동안 힘껏 쥐세요',
-      result: who(resultName) + (res.rank ? '최종 기록 · 명예의 전당 ' + res.rank + '위!' : '최종 기록'),
+      result: '&nbsp;', // 결과 화면은 위 줄 없이 점수·순위만 (줄 높이는 남겨 점수가 움직이지 않게)
     };
     if (!$('banner-label')) buildMain();
     setHtml($('banner-label'), labels[phase]);
@@ -386,6 +385,7 @@
     var busy = g.phase === 'measuring';
     $('btn-start').disabled = busy;
     $('btn-stop').disabled = !busy;
+    $('btn-idle').disabled = g.phase !== 'result';
     $('btn-reset-records').disabled = busy;
     $('ask-name').checked = !!state.settings.askName;
     var nm = state.name || {};
@@ -661,6 +661,7 @@
   var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   $('shortcut').textContent = isMac ? 'Control + D' : 'Ctrl + D';
   $('fs-shortcut').textContent = isMac ? 'F11 / Control + Cmd + F' : 'F11';
+  $('idle-shortcut').textContent = isMac ? 'Control + A' : 'Ctrl + A';
   $('name-shortcut').textContent = $('name-shortcut2').textContent = isMac ? 'Control + F' : 'Ctrl + F';
 
   // macOS: 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
@@ -756,6 +757,7 @@
   $('btn-start').addEventListener('click', function () { api.start(); });
   $('main').addEventListener('click', function (e) { if (e.target.closest('.bb-idle')) api.press(); });
   $('btn-stop').addEventListener('click', function () { api.stop(); });
+  $('btn-idle').addEventListener('click', function () { api.toIdle(); });
   $('btn-save-names').addEventListener('click', saveRecords);
   $('btn-toggle-records').addEventListener('click', function () {
     showAll = !showAll;
@@ -1323,6 +1325,12 @@
     if (e.code === 'KeyD' && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       if (adminOpen) closeAdmin(); else openAdmin();
+      return;
+    }
+    // 결과 화면 → 대기 화면: Control + A (Windows는 Ctrl + A). 입력칸에서는 원래 동작(전체 선택 등)을 둔다.
+    if (e.code === 'KeyA' && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) {
+      e.preventDefault();
+      if (!e.repeat) api.toIdle();
       return;
     }
     // 도전자 이름 입력: Control + F (Windows는 Ctrl + F). macOS 의 Control + Cmd + F 는 위에서 전체화면으로 처리했다.
