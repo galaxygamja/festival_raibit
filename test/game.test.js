@@ -911,4 +911,37 @@ test('Scoring defaults survive first launch and reload; saved scoring is preserv
   }
 });
 
+test('Result WAV respects volume, mute, restart, and playback rejection', () => {
+  const vm = require('vm');
+  const clips = [];
+  function Audio(src) {
+    this.src = src; this.currentTime = 0; this.plays = 0; this.pauses = 0;
+    this.play = () => { this.plays++; return { catch: fn => fn(new Error('audio unavailable')) }; };
+    this.pause = () => { this.pauses++; };
+    clips.push(this);
+  }
+  const sandbox = { window: {}, Audio, console };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/renderer/sound.js'), 'utf8'), sandbox);
+  const sound = sandbox.window.Sound;
+  sound.configure({ on: true, volume: 0.4 });
+  assert.doesNotThrow(() => sound.play('result'));
+  assert.strictEqual(clips.length, 1);
+  assert.strictEqual(clips[0].src, 'sounds/score-fanfare.wav');
+  assert.strictEqual(clips[0].volume, 0.4);
+  clips[0].currentTime = 1;
+  sound.play('result');
+  assert.strictEqual(clips.length, 1);
+  assert.strictEqual(clips[0].currentTime, 0);
+  assert.strictEqual(clips[0].plays, 2);
+  sound.configure({ on: true, volume: 0.2 });
+  assert.strictEqual(clips[0].volume, 0.2);
+  sound.configure({ on: false, volume: 0.2 });
+  assert.strictEqual(clips[0].pauses, 1);
+  sound.play('result');
+  assert.strictEqual(clips[0].plays, 2);
+  const wav = fs.readFileSync(path.join(__dirname, '../src/renderer/sounds/score-fanfare.wav'));
+  assert.strictEqual(wav.toString('ascii', 0, 4), 'RIFF');
+  assert.strictEqual(wav.toString('ascii', 8, 12), 'WAVE');
+});
+
 console.log(`\n${passed}개 통과`);

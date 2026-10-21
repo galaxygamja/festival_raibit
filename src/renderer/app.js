@@ -327,7 +327,7 @@
         Sound.power(null);
         if (ph === 'result') {
           var top5 = g.p1.score > 0 && state.result && state.result.rank;
-          Sound.play(top5 ? 'result' : g.p1.score > 0 ? 'miss' : 'zero');
+          Sound.play('result');
           if (!top5) shakeFor(4, 450); // 명예의 전당에 못 들면 짧게 흔들림
         }
       }

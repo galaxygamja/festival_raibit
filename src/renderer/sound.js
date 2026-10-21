@@ -1,11 +1,18 @@
 'use strict';
 
-// 효과음. 파일 없이 Web Audio 로 8비트 칩 소리(펄스파, 삼각파 베이스, 계단식 잡음)를 그 자리에서 만든다.
-// 크러셔(비트 줄이기) + 짧은 메아리를 거쳐 나간다. 골라 둔 후보: 시작 A (카운트다운 + GO), 현재 힘 A, 최고 갱신 B, 결과 C,
+// 효과음. 결과는 로컬 WAV 팡파르, 나머지는 Web Audio 로 8비트 칩 소리를 만든다.
+// 크러셔(비트 줄이기) + 짧은 메아리를 거쳐 나간다. 골라 둔 후보: 시작 A (카운트다운 + GO), 현재 힘 A, 최고 갱신 B, 결과 WAV,
 // 명예의 전당 B, 0점 C, 버튼 A, 이름 입력 B.
 (function () {
   var ctx = null, pre = null, bus = null, master = null;
   var enabled = true, volume = 0.7;
+  var fanfare = null;
+
+  function stopFanfare() {
+    if (!fanfare) return;
+    fanfare.pause();
+    fanfare.currentTime = 0;
+  }
 
   function ac() {
     if (!ctx) {
@@ -120,12 +127,13 @@
       [84, 88, 91].forEach(function (m, i) { osc({ type: 'p25', f: N(m), t: i * 0.04, s: 0.03, d: 0.02, g: 0.08 }); });
       osc({ type: 'p25', f: N(96), t: 0.12, s: 0.08, d: 0.15, g: 0.08 });
     },
-    // 보스 격파: 폭발 + 내려가는 스윕 + 장화음
+    // 모든 결과(상위권 · 순위 밖 · 0점)에 같은 팡파르를 한 번 재생한다.
     result: function () {
-      noise({ period: 4, rate: 1, rate2: 0.12, d: 1.2, g: 0.45 });
-      osc({ type: 'p50', f: 600, f2: 60, steps: 16, glide: 0.9, s: 0.85, d: 0.1, g: 0.08 });
-      [72, 76, 79, 84].forEach(function (m, i) { osc({ type: 'p25', f: N(m), t: 1.0 + i * 0.07, s: 0.6 - i * 0.07, d: 0.4, g: 0.07 }); });
-      osc({ type: 'triangle', f: N(36), t: 1.0, s: 0.6, d: 0.4, g: 0.4 });
+      if (!fanfare) fanfare = new Audio('sounds/score-fanfare.wav');
+      fanfare.currentTime = 0;
+      fanfare.volume = volume;
+      var playing = fanfare.play();
+      if (playing && playing.catch) playing.catch(function () {});
     },
     // 아쉬움 (명예의 전당 밖): 반음씩 내려가다 낮게 떨리는 음
     miss: function () {
@@ -214,9 +222,11 @@
       var on = !opts || opts.on !== false;
       var vol = opts && typeof opts.volume === 'number' ? opts.volume : volume;
       if (!on && beam) { beam.stop(); beam = null; }
+      if (!on) stopFanfare();
       enabled = on;
       if (vol !== volume) {
         volume = vol;
+        if (fanfare) fanfare.volume = volume;
         if (master) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.02);
       }
     },
