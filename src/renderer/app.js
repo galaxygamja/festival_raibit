@@ -49,14 +49,24 @@
     return Math.max(0, Math.min(15, Math.round((v / MAX_SCORE) * 15)));
   }
 
-  // 왼쪽·오른쪽에 똑같이 놓는 세로 게이지 (아래 1 → 위 15). 같은 값을 두 개에 그린다.
-  function gaugeHtml(v) {
-    var level = levelOf(v), html = '';
-    for (var i = 15; i >= 1; i--) {
-      var c = RAINBOW[i - 1], lit = i <= level;
-      html += '<div style="flex:1;min-height:0;border-radius:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:24px;' + (lit ? 'background:' + c + ';color:#1A0D0B;box-shadow:0 0 10px ' + c + ',0 0 26px ' + c + '66' : 'background:' + c + '12;color:' + c + '66;border:1px solid ' + c + '30') + '">' + i + '</div>';
-    }
+  // 왼쪽·오른쪽에 똑같이 놓는 세로 게이지 (아래 1 → 위 15). 칸은 한 번 만들고, 단계가 바뀔 때만 칸 스타일을 바꾼다.
+  function cellStyle(i, lit) {
+    var c = RAINBOW[i - 1];
+    return 'flex:1;min-height:0;border-radius:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:24px;' + (lit ? 'background:' + c + ';color:#1A0D0B;box-shadow:0 0 10px ' + c + ',0 0 26px ' + c + '66' : 'background:' + c + '12;color:' + c + '66;border:1px solid ' + c + '30');
+  }
+
+  function gaugeCells() {
+    var html = '';
+    for (var i = 15; i >= 1; i--) html += '<div style="' + cellStyle(i, false) + '">' + i + '</div>';
     return html;
+  }
+
+  function setGauge(el, level, prev) {
+    for (var i = 1; i <= 15; i++) {
+      var lit = i <= level;
+      if (prev >= 0 && lit === (i <= prev)) continue;
+      el.children[15 - i].style.cssText = cellStyle(i, lit);
+    }
   }
 
   function player(color, samples, needed, best) {
@@ -129,6 +139,13 @@
     };
   }
 
+  // 내용이 바뀐 칸만 다시 그린다 (측정 중 0.1초마다 전체를 다시 만들면 빛 번짐을 매번 다시 그려서 끊긴다)
+  function setHtml(el, html) {
+    if (el.__html === html) return;
+    el.__html = html;
+    el.innerHTML = html;
+  }
+
   function renderMain() {
     var g = state.game;
     var phase = g.phase;
@@ -141,26 +158,33 @@
       measuring: who(nm.current) + '5초 동안 힘껏 쥐세요',
       result: who(resultName) + (res.rank ? '최종 기록 · 명예의 전당 ' + res.rank + '위!' : '최종 기록'),
     };
+    if (!$('banner-label')) buildMain();
+    setHtml($('banner-label'), labels[phase]);
+    setHtml($('banner-bottom'), bannerBottom(phase, g, res));
+    setHtml($('hall-rows'), hallRows(state.hall));
+  }
+
+  function buildMain() {
     var bannerStyle = 'background:#1C0F0D;border:3px solid ' + AMBER + ';box-shadow:0 0 30px ' + AMBER + '55, inset 0 0 30px ' + AMBER + '22';
 
     var banner = '<div style="flex: none; box-sizing: border-box; padding: 18px 40px 16px; border-radius: 28px; display: flex; flex-direction: column; align-items: center; gap: 6px; ' + bannerStyle + '">' +
-      '<div style="font-size: 26px; letter-spacing: 0.3em; color: #C9B3AC; white-space: nowrap">' + labels[phase] + '</div>' +
+      '<div id="banner-label" style="font-size: 26px; letter-spacing: 0.3em; color: #C9B3AC; white-space: nowrap"></div>' +
       '<div id="score-digits" style="height: 110px"></div>' +
-      bannerBottom(phase, g, res) +
+      '<div id="banner-bottom"></div>' +
       '</div>';
 
     var hall = '<div style="flex: 0 1 auto; min-height: 0; box-sizing: border-box; padding: 20px 32px; border-radius: 24px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 10px; overflow: hidden">' +
       '<h2 style="margin: 0 0 4px; font-size: 44px; font-weight: 400; text-align: center; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.55)">명예의 전당</h2>' +
-      hallRows(state.hall) + '</div>';
+      '<div id="hall-rows" style="display: flex; flex-direction: column; gap: 10px"></div></div>';
 
-    var gauge = function (id) { return '<div id="' + id + '" style="width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px"></div>'; };
+    var gauge = function (id) { return '<div id="' + id + '" style="width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px">' + gaugeCells() + '</div>'; };
     $('main').innerHTML =
       '<div style="flex: 1; min-height: 0; display: flex; justify-content: space-between; gap: 54px">' +
       gauge('gauge-l') +
       '<div style="flex: 0 1 840px; min-width: 0; display: flex; flex-direction: column; justify-content: space-evenly; gap: 26px">' + banner + hall + '</div>' +
       gauge('gauge-r') +
       '</div>';
-    drawn = { p1: -1 }; // 새로 만든 칸이라 다시 그리기
+    drawn = { p1: -1, level: -1 }; // 새로 만든 칸이라 다시 그리기
     drawPlayers();
   }
 
@@ -169,7 +193,7 @@
   // 측정 중 목표값 = 방금 들어온 값(현재 힘), 그 밖에는 최종 점수(최댓값).
   var SMOOTH_MS = 70;
   var shown = { p1: 0 };
-  var drawn = { p1: -1 };
+  var drawn = { p1: -1, level: -1 };
   var lastFrame = 0;
 
   function targetOf(k) {
@@ -183,8 +207,9 @@
       if (v === drawn[k]) return;
       drawn[k] = v;
       var d = $('score-digits'), gl = $('gauge-l'), gr = $('gauge-r');
-      if (d) d.innerHTML = Seg.display(Seg.pad(v), 110, AMBER);
-      if (gl) { var gh = gaugeHtml(v); gl.innerHTML = gh; if (gr) gr.innerHTML = gh; }
+      if (d) Seg.update(d, Seg.pad(v), 110, AMBER);
+      var level = levelOf(v);
+      if (gl && level !== drawn.level) { setGauge(gl, level, drawn.level); setGauge(gr, level, drawn.level); drawn.level = level; }
     });
   }
 

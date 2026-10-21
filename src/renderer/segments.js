@@ -49,5 +49,21 @@
     return html + '</div>';
   }
 
-  window.Seg = { digits: digits, pad: pad, wrap: wrap, display: display };
+  /** el 안의 표시를 str 로 맞춘다. 처음에만 만들고, 그 뒤로는 바뀐 자리의 세그먼트 색만 바꾼다. */
+  function update(el, str, size, color) {
+    if (el.__seg && el.__seg.size === size && el.__seg.color === color && el.__seg.str.length === str.length) {
+      var digitEls = el.firstChild.children;
+      for (var i = 0; i < str.length; i++) {
+        if (str[i] === el.__seg.str[i]) continue;
+        var on = MAP[str[i]] || '', segEls = digitEls[i].children;
+        for (var k = 0; k < 7; k++) segEls[k].style.background = on.indexOf('abcdefg'[k]) >= 0 ? color : color + '1C';
+      }
+      el.__seg.str = str;
+      return;
+    }
+    el.innerHTML = display(str, size, color);
+    el.__seg = { str: str, size: size, color: color };
+  }
+
+  window.Seg = { digits: digits, pad: pad, wrap: wrap, display: display, update: update };
 })();
