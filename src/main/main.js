@@ -202,8 +202,8 @@ function createWindow(full) {
     minHeight: 450,
     center: true,
     backgroundColor: '#140A09',
-    kiosk: full && !IS_MAC,
-    fullscreen: full && !IS_MAC,
+    // macOS 에 fullscreen: false 를 넘기면 초록 버튼의 전체화면이 꺼지므로 Windows 에만 넘긴다
+    ...(IS_MAC ? { fullscreenable: true } : { kiosk: full, fullscreen: full }),
     autoHideMenuBar: true,
     // 제목 표시줄 없이 화면을 창 끝까지 쓴다 (macOS 신호등 버튼·Windows 창 버튼은 화면 위에 겹쳐 남김)
     titleBarStyle: 'hidden',
@@ -226,8 +226,14 @@ function createWindow(full) {
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.webContents.on('did-finish-load', () => push(true));
   // macOS 초록 버튼 등으로 바뀐 경우도 화면에 반영
-  win.on('enter-full-screen', () => push());
-  win.on('leave-full-screen', () => push());
+  // 초록 버튼으로 고른 방식도 다음 실행 때 유지
+  const rememberFullscreen = () => {
+    settings = { ...settings, fullscreen: isFullscreen() };
+    saveSettings();
+    push();
+  };
+  win.on('enter-full-screen', rememberFullscreen);
+  win.on('leave-full-screen', rememberFullscreen);
   win.on('closed', () => { win = null; });
 }
 
