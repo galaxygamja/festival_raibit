@@ -190,7 +190,11 @@ function setFullscreen(on) {
   push();
 }
 
+const ICON = path.join(__dirname, '..', 'assets', 'icon.png');
+
 function createWindow(full) {
+  // 빌드된 앱은 빌드 때 넣은 아이콘을 쓰고, 개발 실행에서만 Dock 아이콘을 바꾼다
+  if (IS_MAC && !app.isPackaged) app.dock.setIcon(ICON);
   win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -206,6 +210,7 @@ function createWindow(full) {
     ...(IS_MAC ? {} : { titleBarOverlay: { color: '#140A09', symbolColor: '#C9B3AC', height: 24 } }),
     show: false,
     title: 'raibitScoreboard',
+    icon: ICON,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,

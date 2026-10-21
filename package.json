@@ -16,6 +16,7 @@
   "build": {
     "appId": "school.festival.raibitscoreboard",
     "productName": "raibitScoreboard",
+    "icon": "src/assets/icon.png",
     "npmRebuild": false,
     "files": [
       "src/**/*",
