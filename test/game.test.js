@@ -381,7 +381,7 @@ test('점수표: 구간마다 직선, 첫 점 아래는 0 에서, 마지막 점 
   assert.strictEqual(scoreFromTable(2, [[4, 800], [8, 900]]), 400);
   assert.deepStrictEqual(cleanScoreTable([[20, 99999], ['x', 1], [5, 100], [5, 200], [0, -4]]), [[0, 0], [5, 100], [20, 9999]]);
   assert.strictEqual(cleanScoreTable([[1, 1]]), null);
-  assert.strictEqual(scoreOf(31, {}), 7000); // 설정이 없으면 기본 (기준 힘 31 = 7000점)
+  assert.strictEqual(scoreOf(35, {}), 3000); // 새 기기의 최종 기본값
   const { g } = makeGame({ score: { ref: 20, points: [[0, 0], [50, 1000], [100, 5000]] } });
   g.start(0);
   g.sample('p1', 15, 100); // 15 = 기준 20 의 75%
@@ -389,12 +389,13 @@ test('점수표: 구간마다 직선, 첫 점 아래는 0 에서, 마지막 점 
   assert.strictEqual(pctOf(15, { ref: 20 }), 75);
 });
 
-test('점수 곡선 점: 기준 힘(100%) = top, 9999 에 닿는 곳에서 끝, 기본은 2.1.8 표와 거의 같다', () => {
+test('점수 곡선 점: 기준 힘(100%) = top, 9999 에 닿는 곳에서 끝, 예전 명시적 곡선 유지', () => {
   const pts = curvePoints(1, 5000);
   assert.deepStrictEqual(pts[pts.length - 1], [200, 9999]);
   assert.strictEqual(scoreFromTable(100, pts), 5000);
   assert.strictEqual(scoreFromTable(50, curvePoints(0.6, 7000)), Math.round(7000 * Math.pow(0.5, 0.6)));
-  DEFAULT_SCORE_TABLE.forEach(([st, v]) => assert.ok(Math.abs(scoreOf(st, {}) - v) <= 80, st + ': ' + scoreOf(st, {}) + ' vs ' + v));
+  const legacy = { score: { ref: 31, points: curvePoints(0.6, 7000) } };
+  DEFAULT_SCORE_TABLE.forEach(([st, v]) => assert.ok(Math.abs(scoreOf(st, legacy) - v) <= 80, st + ': ' + scoreOf(st, legacy) + ' vs ' + v));
   assert.strictEqual(cleanScore({ ref: 0, points: pts }), null);
   assert.deepStrictEqual(cleanScore({ ref: 30, curve: 0.8, top: 6000 }).points, curvePoints(0.8, 6000)); // 점이 없으면 곡선으로 만든다
   assert.strictEqual(scoreFromLegacyTable([[0, 0], [10, 2000]]).ref, 10); // 7000 에 못 미치면 마지막 점이 기준
@@ -888,6 +889,26 @@ test('녹화: 100 ms 구간마다 CSV 한 줄, 원시값은 .raw 에 이어 쓰�
   const raw = fs.readFileSync(r.lastFile.replace(/\.csv$/, '.raw'));
   assert.deepStrictEqual([0, 1, 2, 3].map((i) => raw.readInt16LE(i * 2)), [510, 514, 512, 500]);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('Scoring defaults survive first launch and reload; saved scoring is preserved', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'raibit-scoring-'));
+  try {
+    const store = new Store(dir);
+    const fresh = store.loadSettings();
+    assert.deepStrictEqual([fresh.score.ref, fresh.score.top, fresh.score.curve], [35, 3000, 0.6]);
+    assert.strictEqual(scoreOf(35, fresh), 3000);
+    assert.strictEqual(scoreOf(0, fresh), 0);
+    assert.strictEqual(scoreOf(100000, fresh), 9999);
+    assert.deepStrictEqual(new Store(dir).loadSettings().score, fresh.score);
+    const saved = { ref: 31, top: 7000, curve: 0.6, points: curvePoints(0.6, 7000) };
+    store.saveSettings({ ...fresh, score: saved });
+    assert.deepStrictEqual(new Store(dir).loadSettings().score, saved);
+    assert.strictEqual(scoreOf(31, new Store(dir).loadSettings()), 7000);
+    assert.strictEqual(cleanScore({ ref: 35, curve: 0.6 }).top, 3000);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 console.log(`\n${passed}개 통과`);
