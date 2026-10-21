@@ -41,7 +41,7 @@
         </div>
         <div id="rows" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px"></div>
         <div style="flex: none; display: flex; align-items: center; gap: 16px">
-          <div id="names-msg" style="flex-grow: 1; min-width: 0; font-size: 19px; color: #B8A29B"></div>
+          <div id="names-msg" style="flex-grow: 1; min-width: 0; font-size: 19px; color: #B8A29B">이름·점수를 고친 뒤 저장하세요.</div>
           <button type="button" id="btn-reset-records" style="flex: none; height: 56px; padding: 0 22px; border-radius: 14px; border: 2px solid #FF8A7A; background: transparent; color: #FF8A7A; font-family: inherit; font-size: 22px; cursor: pointer; white-space: nowrap">기록 전체 삭제</button>
           <button type="button" id="btn-save-names" style="flex: none; white-space: nowrap; height: 56px; padding: 0 30px; border-radius: 14px; border: 0; background: #FFB21E; color: #1A0D0B; font-family: inherit; font-size: 26px; cursor: pointer; box-shadow: 0 0 22px rgba(255,178,30,0.45)">변경 저장</button>
         </div>
@@ -61,6 +61,7 @@
               <input type="checkbox" id="ask-name" style="width: 20px; height: 20px; accent-color: #FFB21E; margin: 0">
               이름 받고 시작
             </label>
+            <div id="next-name" style="flex: 1; min-width: 0; font-size: 18px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right"></div>
           </div>
         </div>
 
@@ -80,6 +81,7 @@
               <input type="checkbox" id="sim-toggle" style="width: 18px; height: 18px; accent-color: #FFB21E; margin: 0">
               시뮬레이션
             </label>
+            <button type="button" id="btn-quit" style="height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid #5A3A33; background: transparent; color: #B8A29B; font-family: inherit; font-size: 16px; cursor: pointer">앱 종료</button>
           </div>
           <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center">
             <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
@@ -242,6 +244,7 @@
       <div style="display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto">
         <div class="card" style="flex: none; border-color: #FFB21E">
           <h2>자동 보정</h2>
+          <div class="hint" style="font-size: 17px; color: #B8A29B">이 노트북·이 장소의 잡음을 재서 채널·전원·영점·여유·고역을 고르고, 최대 힘으로 기준 힘도 잡습니다. 결과를 보고 적용할지 정합니다.</div>
           <div style="display: flex; gap: 10px">
             <button type="button" id="btn-cal-full" class="btn amber" style="flex: 1; height: 48px; font-size: 22px">자동 보정 (12초)</button>
             <button type="button" id="btn-cal-noise" class="btn" style="height: 48px" title="쉬는 동안만 재서 전원·영점·여유만 다시 맞춥니다">잡음만 (5초)</button>
@@ -249,7 +252,7 @@
           <div id="cal-last" class="hint"></div>
         </div>
         <div class="card" style="flex: none">
-          <h2>직접 보정</h2>
+          <h2>신호 <span class="hint" style="font-size: 17px">· 직접 조정 (보통은 자동 보정이 맞춤)</span></h2>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
             <label class="field" title="센서가 꽂힌 SpikerBox 채널"><span>채널</span><select id="s-channel"><option value="1">1</option><option value="2">2</option></select></label>
             <label class="field" title="한국·미국 60 Hz, 유럽·일본 동부 등 50 Hz"><span>전원</span><select id="s-mains"><option value="60">60 Hz</option><option value="50">50 Hz</option></select></label>
@@ -260,6 +263,7 @@
           </div>
           <div style="display: flex; gap: 10px; align-items: center">
             <button type="button" id="btn-s-zero" class="btn">영점만 (3초)</button>
+            <div id="s-live" class="hint" style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"></div>
           </div>
         </div>
         <div class="card" style="flex: none">
@@ -268,6 +272,7 @@
             <input type="checkbox" id="s-askname" style="width: 22px; height: 22px; accent-color: #FFB21E; margin: 0">
             이름 받고 시작 (명예의 전당에 들면 폭죽)
           </label>
+          <div class="hint">켜면 START 를 눌렀을 때 이름이 없으면 입력창이 뜹니다. 미리 넣으려면 관중 화면에서 <span id="name-shortcut2"></span>. 끄면 이름 없이(ㅇㅇㅇ) 바로 시작합니다.</div>
         </div>
         <div class="card" style="flex: none">
           <h2>소리</h2>
@@ -326,6 +331,7 @@
     <div style="width: 760px; box-sizing: border-box; padding: 36px 44px; border-radius: 28px; background: #1C0F0D; border: 3px solid #FFB21E; box-shadow: 0 0 40px rgba(255,178,30,0.45); display: flex; flex-direction: column; gap: 18px">
       <div style="font-size: 46px; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5)">도전자 이름</div>
       <input type="text" id="name-input" maxlength="20" autocomplete="off" spellcheck="false" aria-label="도전자 이름" style="box-sizing: border-box; height: 84px; padding: 0 24px; border-radius: 16px; font-family: inherit; font-size: 48px; color: #F3E6E1; background: #120807; border: 3px solid #4A2E28; outline: none">
+      <div id="name-hint" style="font-size: 24px; color: #C9B3AC"></div>
     </div>
   </div>
 

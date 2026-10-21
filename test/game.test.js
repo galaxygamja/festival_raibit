@@ -381,7 +381,7 @@ test('점수표: 구간마다 직선, 첫 점 아래는 0 에서, 마지막 점 
   assert.strictEqual(scoreFromTable(2, [[4, 800], [8, 900]]), 400);
   assert.deepStrictEqual(cleanScoreTable([[20, 99999], ['x', 1], [5, 100], [5, 200], [0, -4]]), [[0, 0], [5, 100], [20, 9999]]);
   assert.strictEqual(cleanScoreTable([[1, 1]]), null);
-  assert.strictEqual(scoreOf(31, {}), 7000); // 설정이 없으면 기본 (기준 힘 31 = 7000점)
+  assert.strictEqual(scoreOf(35, {}), 3000); // 새 기기의 최종 기본값
   const { g } = makeGame({ score: { ref: 20, points: [[0, 0], [50, 1000], [100, 5000]] } });
   g.start(0);
   g.sample('p1', 15, 100); // 15 = 기준 20 의 75%
@@ -389,12 +389,13 @@ test('점수표: 구간마다 직선, 첫 점 아래는 0 에서, 마지막 점 
   assert.strictEqual(pctOf(15, { ref: 20 }), 75);
 });
 
-test('점수 곡선 점: 기준 힘(100%) = top, 9999 에 닿는 곳에서 끝, 기본은 2.1.8 표와 거의 같다', () => {
+test('점수 곡선 점: 기준 힘(100%) = top, 9999 에 닿는 곳에서 끝, 예전 명시적 곡선 유지', () => {
   const pts = curvePoints(1, 5000);
   assert.deepStrictEqual(pts[pts.length - 1], [200, 9999]);
   assert.strictEqual(scoreFromTable(100, pts), 5000);
   assert.strictEqual(scoreFromTable(50, curvePoints(0.6, 7000)), Math.round(7000 * Math.pow(0.5, 0.6)));
-  DEFAULT_SCORE_TABLE.forEach(([st, v]) => assert.ok(Math.abs(scoreOf(st, {}) - v) <= 80, st + ': ' + scoreOf(st, {}) + ' vs ' + v));
+  const legacy = { score: { ref: 31, points: curvePoints(0.6, 7000) } };
+  DEFAULT_SCORE_TABLE.forEach(([st, v]) => assert.ok(Math.abs(scoreOf(st, legacy) - v) <= 80, st + ': ' + scoreOf(st, legacy) + ' vs ' + v));
   assert.strictEqual(cleanScore({ ref: 0, points: pts }), null);
   assert.deepStrictEqual(cleanScore({ ref: 30, curve: 0.8, top: 6000 }).points, curvePoints(0.8, 6000)); // 점이 없으면 곡선으로 만든다
   assert.strictEqual(scoreFromLegacyTable([[0, 0], [10, 2000]]).ref, 10); // 7000 에 못 미치면 마지막 점이 기준
@@ -888,6 +889,118 @@ test('녹화: 100 ms 구간마다 CSV 한 줄, 원시값은 .raw 에 이어 쓰�
   const raw = fs.readFileSync(r.lastFile.replace(/\.csv$/, '.raw'));
   assert.deepStrictEqual([0, 1, 2, 3].map((i) => raw.readInt16LE(i * 2)), [510, 514, 512, 500]);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('Scoring defaults survive first launch and reload; saved scoring is preserved', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'raibit-scoring-'));
+  try {
+    const store = new Store(dir);
+    const fresh = store.loadSettings();
+    assert.deepStrictEqual([fresh.score.ref, fresh.score.top, fresh.score.curve], [35, 3000, 0.6]);
+    assert.strictEqual(scoreOf(35, fresh), 3000);
+    assert.strictEqual(scoreOf(0, fresh), 0);
+    assert.strictEqual(scoreOf(100000, fresh), 9999);
+    assert.deepStrictEqual(new Store(dir).loadSettings().score, fresh.score);
+    const saved = { ref: 31, top: 7000, curve: 0.6, points: curvePoints(0.6, 7000) };
+    store.saveSettings({ ...fresh, score: saved });
+    assert.deepStrictEqual(new Store(dir).loadSettings().score, saved);
+    assert.strictEqual(scoreOf(31, new Store(dir).loadSettings()), 7000);
+    assert.strictEqual(cleanScore({ ref: 35, curve: 0.6 }).top, 3000);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Result WAV respects volume, mute, restart, and playback rejection', () => {
+  const vm = require('vm');
+  const clips = [];
+  function Audio(src) {
+    this.src = src; this.currentTime = 0; this.plays = 0; this.pauses = 0;
+    this.play = () => { this.plays++; return { catch: fn => fn(new Error('audio unavailable')) }; };
+    this.pause = () => { this.pauses++; };
+    clips.push(this);
+  }
+  const sandbox = { window: {}, Audio, console };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/renderer/sound.js'), 'utf8'), sandbox);
+  const sound = sandbox.window.Sound;
+  sound.configure({ on: true, volume: 0.4 });
+  assert.doesNotThrow(() => sound.play('result'));
+  assert.strictEqual(clips.length, 1);
+  assert.strictEqual(clips[0].src, 'sounds/score-fanfare.wav');
+  assert.strictEqual(clips[0].volume, 0.4);
+  clips[0].currentTime = 1;
+  sound.play('result');
+  assert.strictEqual(clips.length, 1);
+  assert.strictEqual(clips[0].currentTime, 0);
+  assert.strictEqual(clips[0].plays, 2);
+  sound.configure({ on: true, volume: 0.2 });
+  assert.strictEqual(clips[0].volume, 0.2);
+  sound.configure({ on: false, volume: 0.2 });
+  assert.strictEqual(clips[0].pauses, 1);
+  sound.play('result');
+  assert.strictEqual(clips[0].plays, 2);
+  const wav = fs.readFileSync(path.join(__dirname, '../src/renderer/sounds/score-fanfare.wav'));
+  assert.strictEqual(wav.toString('ascii', 0, 4), 'RIFF');
+  assert.strictEqual(wav.toString('ascii', 8, 12), 'WAVE');
+});
+
+test('Combined strength sound layers charging beam and motor without duplicating voices', () => {
+  const vm = require('vm');
+  const oscillators = [], gains = [], timers = [];
+  function param() {
+    return { value: 0, setValueAtTime(v) { this.value = v; }, setTargetAtTime(v) { this.value = v; } };
+  }
+  function node() { return { connect() {}, disconnect() {}, gain: param(), frequency: param(), detune: param(), Q: param() }; }
+  let contexts = 0;
+  class AudioContext {
+    constructor() { contexts++; this.currentTime = 0; this.state = 'running'; this.destination = {}; }
+    createGain() { const n = node(); gains.push(n); return n; }
+    createOscillator() {
+      const n = { ...node(), starts: 0, stops: 0, start() { this.starts++; }, stop() { this.stops++; }, setPeriodicWave() { this.periodic = true; } };
+      oscillators.push(n); return n;
+    }
+    createWaveShaper() { return node(); }
+    createDynamicsCompressor() { return { ...node(), threshold: param(), ratio: param() }; }
+    createDelay() { return { ...node(), delayTime: param() }; }
+    createBiquadFilter() { return node(); }
+    createPeriodicWave() { return {}; }
+  }
+  const sandbox = { window: {}, AudioContext, console, setTimeout: fn => timers.push(fn) };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/renderer/sound.js'), 'utf8'), sandbox);
+  const sound = sandbox.window.Sound;
+  sound.configure({ on: true, volume: 0.4 });
+  sound.power(0.5, 0.25);
+  assert.strictEqual(contexts, 1);
+  assert.strictEqual(oscillators.length, 7);
+  assert.strictEqual(oscillators.filter(n => n.periodic).length, 2);
+  const motor = oscillators.find(n => n.type === 'sawtooth');
+  const rotor = oscillators.find(n => n.type === 'sine');
+  assert.ok(Math.abs(motor.frequency.value - 90 * Math.pow(10, 0.25)) < 1e-8);
+  assert.strictEqual(rotor.frequency.value, 14 + 65 * 0.25);
+  sound.power(1, 0.3);
+  const beamFrequency = oscillators[0].frequency.value;
+  sound.power(1, 0.8); // The beam is saturated, but the motor must still rise.
+  assert.strictEqual(oscillators[0].frequency.value, beamFrequency);
+  assert.ok(Math.abs(motor.frequency.value - 90 * Math.pow(10, 0.8)) < 1e-8);
+  assert.strictEqual(oscillators.length, 7);
+  sound.power(0, 0);
+  assert.strictEqual(gains[5].gain.value, 0); // Beam output.
+  assert.strictEqual(gains[gains.length - 1].gain.value, 0); // Motor output.
+  sound.configure({ on: true, volume: 0.2 });
+  assert.strictEqual(gains[0].gain.value, 0.2); // Shared master volume.
+  sound.power(null);
+  timers.splice(0).forEach(fn => fn());
+  assert.ok(oscillators.every(n => n.stops === 1));
+  sound.configure({ on: false, volume: 0.2 });
+  sound.power(0.5, 0.5);
+  assert.strictEqual(oscillators.length, 7);
+  sound.configure({ on: true, volume: 0.2 });
+  sound.power(0.5, 0.5);
+  assert.strictEqual(contexts, 1);
+  assert.strictEqual(oscillators.length, 14);
+  sound.configure({ on: false, volume: 0.2 });
+  timers.splice(0).forEach(fn => fn());
+  assert.ok(oscillators.every(n => n.starts === 1 && n.stops === 1));
 });
 
 console.log(`\n${passed}개 통과`);

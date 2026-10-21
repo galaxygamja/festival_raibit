@@ -1,11 +1,18 @@
 'use strict';
 
-// 효과음. 파일 없이 Web Audio 로 8비트 칩 소리(펄스파, 삼각파 베이스, 계단식 잡음)를 그 자리에서 만든다.
-// 크러셔(비트 줄이기) + 짧은 메아리를 거쳐 나간다. 골라 둔 후보: 시작 A (카운트다운 + GO), 현재 힘 A, 최고 갱신 B, 결과 C,
+// 효과음. 결과는 로컬 WAV 팡파르, 나머지는 Web Audio 로 8비트 칩 소리를 만든다.
+// 크러셔(비트 줄이기) + 짧은 메아리를 거쳐 나간다. 골라 둔 후보: 시작 A (카운트다운 + GO), 현재 힘 A, 최고 갱신 B, 결과 WAV,
 // 명예의 전당 B, 0점 C, 버튼 A, 이름 입력 B.
 (function () {
   var ctx = null, pre = null, bus = null, master = null;
   var enabled = true, volume = 0.7;
+  var fanfare = null;
+
+  function stopFanfare() {
+    if (!fanfare) return;
+    fanfare.pause();
+    fanfare.currentTime = 0;
+  }
 
   function ac() {
     if (!ctx) {
@@ -120,12 +127,13 @@
       [84, 88, 91].forEach(function (m, i) { osc({ type: 'p25', f: N(m), t: i * 0.04, s: 0.03, d: 0.02, g: 0.08 }); });
       osc({ type: 'p25', f: N(96), t: 0.12, s: 0.08, d: 0.15, g: 0.08 });
     },
-    // 보스 격파: 폭발 + 내려가는 스윕 + 장화음
+    // 모든 결과(상위권 · 순위 밖 · 0점)에 같은 팡파르를 한 번 재생한다.
     result: function () {
-      noise({ period: 4, rate: 1, rate2: 0.12, d: 1.2, g: 0.45 });
-      osc({ type: 'p50', f: 600, f2: 60, steps: 16, glide: 0.9, s: 0.85, d: 0.1, g: 0.08 });
-      [72, 76, 79, 84].forEach(function (m, i) { osc({ type: 'p25', f: N(m), t: 1.0 + i * 0.07, s: 0.6 - i * 0.07, d: 0.4, g: 0.07 }); });
-      osc({ type: 'triangle', f: N(36), t: 1.0, s: 0.6, d: 0.4, g: 0.4 });
+      if (!fanfare) fanfare = new Audio('sounds/score-fanfare.wav');
+      fanfare.currentTime = 0;
+      fanfare.volume = volume;
+      var playing = fanfare.play();
+      if (playing && playing.catch) playing.catch(function () {});
     },
     // 아쉬움 (명예의 전당 밖): 반음씩 내려가다 낮게 떨리는 음
     miss: function () {
@@ -163,7 +171,7 @@
     },
   };
 
-  // 현재 힘: 충전 빔. 근음·옥타브가 번갈아 울리고, 힘(0~1)에 따라 반음씩 3옥타브를 오르내린다.
+  // 현재 힘: 원본의 8비트 충전 빔 + 점수에 따라 회전하는 모터음. 두 층 모두 기존 master 음량을 따른다.
   function Beam() {
     var c = ac(), out = c.createGain(); out.gain.value = 0; out.connect(bus);
     var o1 = voice(c, 'p25'), o2 = voice(c, 'p12'), o3 = voice(c, 'triangle');
@@ -174,25 +182,43 @@
     lfo.connect(l1); l1.connect(g1.gain); lfo.connect(l2); l2.connect(g2.gain);
     o1.connect(g1); o2.connect(g2); o3.connect(g3);
     [g1, g2, g3].forEach(function (g) { g.connect(out); });
-    var nodes = [o1, o2, o3, lfo];
+    // juhyun5801 모터음: 톱니파 + 약간 어긋난 사각파 + 회전 진폭 변조.
+    // 원본 충전음과 합칠 때 과도하게 커지지 않도록 모터 출력을 낮춘다.
+    var motor = c.createOscillator(), second = c.createOscillator(), rotor = c.createOscillator();
+    var motorLevel = c.createGain(), secondLevel = c.createGain(), depth = c.createGain();
+    var filter = c.createBiquadFilter(), motorOut = c.createGain();
+    motor.type = 'sawtooth'; second.type = 'square'; second.detune.value = 7; rotor.type = 'sine';
+    motorLevel.gain.value = 0.55; secondLevel.gain.value = 0.18; depth.gain.value = 0.22;
+    filter.type = 'lowpass'; filter.Q.value = 1.1; motorOut.gain.value = 0;
+    motor.connect(motorLevel); second.connect(secondLevel); secondLevel.connect(motorLevel);
+    rotor.connect(depth); depth.connect(motorLevel.gain);
+    motorLevel.connect(filter); filter.connect(motorOut); motorOut.connect(pre);
+    var nodes = [o1, o2, o3, lfo, motor, second, rotor];
     nodes.forEach(function (n) { n.start(); });
     var last = -1;
-    this.set = function (p) {
+    this.set = function (p, motorRatio) {
       var t = c.currentTime, m = Math.round(40 + p * 36);
       if (m !== last) {
         last = m;
         o1.frequency.setValueAtTime(N(m), t); o2.frequency.setValueAtTime(N(m + 12), t); o3.frequency.setValueAtTime(N(m - 12), t);
       }
       lfo.frequency.setTargetAtTime(10 + p * 14, t, 0.05);
-      out.gain.setTargetAtTime(p < 0.01 ? 0 : 0.05 + p * 0.13, t, 0.05);
+      out.gain.setTargetAtTime(p < 0.01 ? 0 : (0.05 + p * 0.13) * 0.65, t, 0.05);
+      var frequency = 90 * Math.pow(10, motorRatio);
+      motor.frequency.setTargetAtTime(frequency, t, 0.04);
+      second.frequency.setTargetAtTime(frequency, t, 0.04);
+      rotor.frequency.setTargetAtTime(14 + 65 * motorRatio, t, 0.04);
+      filter.frequency.setTargetAtTime(650 + 4200 * motorRatio, t, 0.04);
+      motorOut.gain.setTargetAtTime(motorRatio ? (0.4 + 0.2 * Math.sqrt(motorRatio)) * 0.15 : 0, t, 0.025);
     };
     this.stop = function () {
       out.gain.setTargetAtTime(0, c.currentTime, 0.04);
-      setTimeout(function () { nodes.forEach(function (n) { n.stop(); }); out.disconnect(); }, 400);
+      motorOut.gain.setTargetAtTime(0, c.currentTime, 0.01);
+      setTimeout(function () { nodes.forEach(function (n) { n.stop(); }); out.disconnect(); motorOut.disconnect(); }, 400);
     };
   }
 
-  var beam = null, lastP = -1;
+  var beam = null, lastP = -1, lastMotor = -1;
 
   window.Sound = {
     play: function (name) {
@@ -200,23 +226,27 @@
       try { SOUNDS[name](); } catch (e) { console.warn('sound', name, e); }
     },
     // 측정 중 현재 힘 (0~1). null 이면 끈다.
-    power: function (p) {
+    power: function (p, motorRatio) {
       if (p == null || !enabled) {
         if (beam) { beam.stop(); beam = null; }
         return;
       }
-      if (!beam) { beam = new Beam(); lastP = -1; }
-      if (Math.abs(p - lastP) < 0.003) return;
-      lastP = p;
-      beam.set(p);
+      p = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
+      motorRatio = motorRatio == null ? p : Number.isFinite(motorRatio) ? Math.max(0, Math.min(1, motorRatio)) : 0;
+      if (!beam) { beam = new Beam(); lastP = lastMotor = -1; }
+      if (Math.abs(p - lastP) < 0.003 && Math.abs(motorRatio - lastMotor) < 0.003) return;
+      lastP = p; lastMotor = motorRatio;
+      beam.set(p, motorRatio);
     },
     configure: function (opts) {
       var on = !opts || opts.on !== false;
       var vol = opts && typeof opts.volume === 'number' ? opts.volume : volume;
       if (!on && beam) { beam.stop(); beam = null; }
+      if (!on) stopFanfare();
       enabled = on;
       if (vol !== volume) {
         volume = vol;
+        if (fanfare) fanfare.volume = volume;
         if (master) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.02);
       }
     },

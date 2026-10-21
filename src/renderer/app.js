@@ -177,10 +177,10 @@
     var nm = state.name || {};
     var who = function (n) { return n ? esc(n) + '님 · ' : ''; };
     var labels = {
-      idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '',
+      idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '다음 경기 대기',
       countdown: who(nm.current) + '준비하세요',
       measuring: who(nm.current) + '5초 동안 힘껏 쥐세요',
-      result: '', // 결과 화면은 탭 없이 점수·순위만
+      result: who(state.result && state.result.name) + (res.rank ? '최종 기록 · 명예의 전당 ' + res.rank + '위!' : '최종 기록'),
     };
     if (!$('banner-label')) buildMain();
     setHtml($('banner-label'), labels[phase]);
@@ -253,7 +253,7 @@
       // 현재 힘 소리는 화면 숫자와 같은 부드러운 값을 따라간다 (점수 상한 = 1)
       if (state.game.phase === 'measuring') {
         var top = (state.settings.score && state.settings.score.top) || 7000;
-        Sound.power(Math.min(1, shown.p1 / top));
+        Sound.power(Math.min(1, shown.p1 / top), Math.min(1, shown.p1 / MAX_SCORE));
       }
     }
     requestAnimationFrame(frame);
@@ -327,7 +327,7 @@
         Sound.power(null);
         if (ph === 'result') {
           var top5 = g.p1.score > 0 && state.result && state.result.rank;
-          Sound.play(top5 ? 'result' : g.p1.score > 0 ? 'miss' : 'zero');
+          Sound.play('result');
           if (!top5) shakeFor(4, 450); // 명예의 전당에 못 들면 짧게 흔들림
         }
       }
@@ -347,10 +347,12 @@
   var MEDAL = ['#FFC83D', '#D3DAE2', '#D88A4E'];
   var renderedHallKey = '';
 
-  // 경기 제어 카드 우상단 상태: 측정 중 / 대기 중 (결과 화면도 대기 중)
+  // 경기 제어 카드 우상단 상태: 카운트다운 · 측정 · 결과 · 대기
   function stateLabel(g) {
     if (g.phase === 'countdown') return ['카운트다운', '#7BE08A'];
-    return g.phase === 'measuring' ? ['측정 중', '#7BE08A'] : ['대기 중', '#8E7770'];
+    if (g.phase === 'measuring') return ['측정 중', '#7BE08A'];
+    if (g.phase === 'result') return ['기록 ' + g.p1.score + '점 · 다음 도전 대기', AMBER];
+    return ['대기 중 · START 대기', '#C9B3AC'];
   }
 
   // 전체 기록은 payload 에 없고, recordsRev 가 바뀔 때마다 records:get 으로 받아 온다 (점수 내림차순)
@@ -504,11 +506,13 @@
     $('btn-stop').disabled = !busy;
     $('btn-reset-records').disabled = busy;
     $('ask-name').checked = !!state.settings.askName;
+    var nm = state.name || {};
+    $('next-name').textContent = nm.current ? '측정 중: ' + nm.current : nm.next ? '다음 도전자: ' + nm.next : '다음 도전자 이름 없음';
 
     renderPorts();
 
     $('sim-toggle').checked = state.sim;
-    $('btn-fullscreen').textContent = state.fullscreen ? '창 모드' : '전체화면';
+    $('btn-fullscreen').textContent = state.fullscreen ? '창 모드로 보기' : '전체화면으로 보기';
     if (state.saveError) {
       $('names-msg').textContent = state.saveError;
       $('names-msg').style.color = '#FF8A7A';
@@ -642,7 +646,7 @@
       ['표시한 시간', counts || null],
       ['파일', r.on ? r.file : r.lastFile ? r.lastFile + ' (저장됨)' : null, !r.on && r.lastFile ? GOOD : null],
       ['오류', r.error, r.error ? BAD : null],
-    ]);
+    ]) + '<div style="font-size: 13px; color: #8E7770; overflow-wrap: anywhere">' + esc(r.dir || '') + '</div>';
   }
 
   function renderDiag() {
@@ -777,7 +781,7 @@
   var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   $('shortcut').textContent = isMac ? 'Control + D' : 'Ctrl + D';
   $('fs-shortcut').textContent = isMac ? 'F11 / Control + Cmd + F' : 'F11';
-  $('name-shortcut').textContent = isMac ? 'Control + F' : 'Ctrl + F';
+  $('name-shortcut').textContent = $('name-shortcut2').textContent = isMac ? 'Control + F' : 'Ctrl + F';
   $('guide-shortcut').textContent = isMac ? 'Control + /' : 'Ctrl + /';
 
   // 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
@@ -942,6 +946,11 @@
   $('open-ports').addEventListener('change', function (e) {
     var el = e.target;
     if (el.dataset && el.dataset.path && api.setPortRole) { api.setPortRole(el.dataset.path, el.value); el.blur(); }
+  });
+  $('btn-quit').addEventListener('click', function () {
+    askConfirm({ title: '앱을 종료할까요?', ok: '종료', danger: true }).then(function (yes) {
+      if (yes) api.quit();
+    });
   });
   $('btn-reconnect').addEventListener('click', function () { api.reconnect(); });
   $('sim-toggle').addEventListener('change', function (e) { api.setSim(e.target.checked); });
@@ -1178,6 +1187,7 @@
     drawTable(livePct, maxPct);
     $('t-live').textContent = '지금 힘 = 기준의 ' + fmt(livePct, 0) + '% → ' + scoreFromTable(livePct, sc.points) + '점' +
       (maxS ? ' · 마지막 측정 최고 ' + fmt(maxPct, 0) + '% → ' + scoreFromTable(maxPct, sc.points) + '점' : '');
+    $('s-live').textContent = emg.zeroing ? '영점 재는 중… 힘을 빼세요' : '지금 거른 RMS ' + fmt(emg.rms, 1) + ' · 세기 ' + fmt(emg.strength, 1) + ' · 거르기 전 ' + fmt(emg.rmsRaw, 1);
     if (lastZeroing && !emg.zeroing) $('s-rest').value = Math.round((emg.restRms || 0) * 100) / 100; // 영점 잡기가 끝나면 입력칸에 넣는다
     lastZeroing = !!emg.zeroing;
     var busy = g.phase === 'measuring' || g.phase === 'countdown';
@@ -1369,17 +1379,27 @@
 
   function renderNameModal() {
     var want = nameModalWanted();
-    if (want === nameShown) return;
+    if (want === nameShown) {
+      if (want) $('name-hint').textContent = nameHint();
+      return;
+    }
     nameShown = want;
     $('name-modal').hidden = !want;
     if (want) {
       releaseSimKeys();
       Sound.play('name');
+      $('name-hint').textContent = nameHint();
       $('name-input').value = (state.name && state.name.next) || '';
       setTimeout(function () { $('name-input').focus(); }, 0);
     } else if (document.activeElement === $('name-input')) {
       $('name-input').blur();
     }
+  }
+
+  function nameHint() {
+    return state.name && state.name.prompt
+      ? 'Enter: 바로 시작 · 비우고 Enter: 이름 없이 시작 · Esc: 취소'
+      : 'Enter: 저장 (START 를 누르면 시작) · Esc: 닫기';
   }
 
   function openNameModal() {

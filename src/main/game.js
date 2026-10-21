@@ -23,7 +23,7 @@ const DEFAULT_SCORE_TABLE = [[0, 0], [2, 1300], [5, 2300], [10, 3500], [20, 5300
 //   top    곡선 버튼으로 만들 때 기준 힘(100%)의 점수
 //   curve  곡선 모양 (지수, 1 = 직선, 작을수록 처음에 점수가 빨리 오르고 높은 점수는 어렵다). 점을 직접 고치면 null
 //   points [[기준 대비 %, 점수], …] 점수 계산은 이것만 본다. 점과 점 사이는 직선, 마지막 점 위는 그 점수 그대로
-// 기본: 기준 힘 31 (실제 녹화의 최대 힘, 80 Hz 고역) = 7000점, 곡선 0.6 (2.1.7 · 2.1.8 기본과 같은 모양)
+// 기본: 기준 힘 35 = 3000점, 곡선 0.6
 const CURVE_PCTS = [0, 2.5, 5, 10, 20, 35, 50, 70, 100, 130, 160, 200, 260, 340];
 const CURVE_PRESETS = [
   { curve: 1, name: '직선' },
@@ -33,16 +33,16 @@ const CURVE_PRESETS = [
 ];
 
 /** 곡선 모양 → 점수표 점들: 점수 = top × (%/100)^curve, 9999 에 닿는 % 에서 끝 */
-function curvePoints(curve, top = 7000) {
+function curvePoints(curve, top = 3000) {
   const k = Number(curve) > 0 ? Number(curve) : DEFAULT_CURVE;
-  const t = Math.max(1, Math.min(MAX_SCORE, Number(top) || 7000));
+  const t = Math.max(1, Math.min(MAX_SCORE, Number(top) || 3000));
   const pmax = 100 * Math.pow(MAX_SCORE / t, 1 / k);
   const pts = CURVE_PCTS.filter((p) => p < pmax - 0.5).map((p) => [p, Math.round(t * Math.pow(p / 100, k))]);
   pts.push([Math.round(pmax * 10) / 10, MAX_SCORE]);
   return pts;
 }
 
-const DEFAULT_SCORE = { ref: 31, top: 7000, curve: DEFAULT_CURVE, points: curvePoints(DEFAULT_CURVE, 7000) };
+const DEFAULT_SCORE = { ref: 35, top: 3000, curve: DEFAULT_CURVE, points: curvePoints(DEFAULT_CURVE, 3000) };
 
 function defaultScore() {
   return { ...DEFAULT_SCORE, points: DEFAULT_SCORE.points.map((p) => p.slice()) };
@@ -83,7 +83,7 @@ function cleanScore(raw) {
   const ref = Number(raw.ref);
   if (!(ref > 0) || !Number.isFinite(ref)) return null;
   const curve = Number(raw.curve) > 0 && Number(raw.curve) <= 2 ? Math.round(Number(raw.curve) * 100) / 100 : null;
-  const top = Number.isFinite(Number(raw.top)) ? Math.max(1, Math.min(MAX_SCORE, Math.round(Number(raw.top)))) : 7000;
+  const top = Number.isFinite(Number(raw.top)) ? Math.max(1, Math.min(MAX_SCORE, Math.round(Number(raw.top)))) : 3000;
   const points = cleanScoreTable(raw.points) || (curve ? curvePoints(curve, top) : null);
   if (!points) return null;
   return { ref: Math.round(Math.min(100000, ref) * 100) / 100, top, curve, points };
