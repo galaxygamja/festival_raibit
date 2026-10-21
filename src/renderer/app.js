@@ -387,8 +387,6 @@
     $('btn-stop').disabled = !busy;
     $('btn-reset-records').disabled = busy;
     $('ask-name').checked = !!state.settings.askName;
-    var nm = state.name || {};
-    $('next-name').textContent = nm.current ? '측정 중: ' + nm.current : nm.next ? '다음 도전자: ' + nm.next : '다음 도전자 이름 없음';
 
     renderPorts();
 
