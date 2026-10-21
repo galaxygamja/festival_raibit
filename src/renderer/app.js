@@ -660,7 +660,7 @@
   $('shortcut').textContent = isMac ? 'Control + D' : 'Ctrl + D';
   $('fs-shortcut').textContent = isMac ? 'F11 / Control + Cmd + F' : 'F11';
   $('name-shortcut').textContent = isMac ? 'Control + F' : 'Ctrl + F';
-  $('guide-shortcut').textContent = isMac ? 'Control + ?' : 'Ctrl + ?';
+  $('guide-shortcut').textContent = isMac ? 'Control + /' : 'Ctrl + /';
 
   // macOS: 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
   if (isMac) {
@@ -1352,11 +1352,11 @@
     $('celebrate').hidden = true;
   }
 
-  // ───────────────────────── 조작 안내 (관리자 화면에서 Control + ?) ─────────────────────────
+  // ───────────────────────── 조작 안내 (관리자 화면에서 Control + /) ─────────────────────────
   var guideOpen = false, guidePrev = null;
 
-  function isGuideKey(e) { // Control + ? = Control + Shift + / (Windows는 Ctrl + ?)
-    return e.code === 'Slash' && e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey;
+  function isGuideKey(e) { // Control + / (Windows는 Ctrl + /)
+    return e.code === 'Slash' && e.ctrlKey && !e.shiftKey && !e.metaKey && !e.altKey;
   }
 
   function renderGuide() {
@@ -1364,7 +1364,7 @@
     // [그룹 이름, 부제, [[설명, 키 목록(배열 하나 = 함께 누름, '/' = 또는, '~' = 범위)], …], 메모]
     var cols = [
       [
-        ['관리자 화면', '', [['열기 · 닫기', [C, 'D']], ['닫기', ['Esc']], ['조작 안내 열기 · 닫기', [C, '?']]]],
+        ['관리자 화면', '', [['열기 · 닫기', [C, 'D']], ['닫기', ['Esc']], ['조작 안내 열기 · 닫기', [C, '/']]]],
         ['기록', '1페이지', [['이름 · 점수 고친 뒤 저장', ['Enter']]]],
         ['진단', '2페이지', [['지금 하는 동작 표시', ['0', '~', '4']]], '0 없음 · 1 쉼 · 2 약하게 · 3 중간 · 4 최대']
       ],
@@ -1443,7 +1443,7 @@
       if (e.key === 'Escape' || isGuideKey(e)) { e.preventDefault(); closeGuide(); }
       return;
     }
-    // 조작 안내: Control + ? (관리자 화면에서만)
+    // 조작 안내: Control + / (관리자 화면에서만)
     if (isGuideKey(e)) {
       e.preventDefault();
       if (adminOpen && !e.repeat) openGuide();
