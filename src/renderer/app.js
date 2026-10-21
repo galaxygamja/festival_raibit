@@ -32,6 +32,8 @@
     stage.style.width = stageW + 'px';
     stage.style.height = stageH + 'px';
     stage.style.transform = 'translate(' + (w - stageW * s) / 2 + 'px,0) scale(' + s + ')';
+    // 세로로 긴 창: 관중 화면의 가운데 칸(점수·명예의 전당)을 키우는 정도 (높이 900 → 0, 1900 → 1, 최대 1.5. CSS --tall)
+    stage.style.setProperty('--tall', Math.max(0, Math.min(1.5, (stageH - DESIGN_H) / 1000)).toFixed(4));
   }
   window.addEventListener('resize', fit);
   fit();
@@ -52,7 +54,7 @@
   // 왼쪽·오른쪽에 똑같이 놓는 세로 게이지 (아래 1 → 위 15). 칸은 한 번 만들고, 단계가 바뀔 때만 칸 스타일을 바꾼다.
   function cellStyle(i, lit) {
     var c = RAINBOW[i - 1];
-    return 'flex:1;min-height:0;border-radius:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:24px;' + (lit ? 'background:' + c + ';color:#1A0D0B;box-shadow:0 0 10px ' + c + ',0 0 26px ' + c + '66' : 'background:' + c + '12;color:' + c + '66;border:1px solid ' + c + '30');
+    return 'flex:1;min-height:0;border-radius:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:calc(24px + 14px * var(--tall));' + (lit ? 'background:' + c + ';color:#1A0D0B;box-shadow:0 0 10px ' + c + ',0 0 26px ' + c + '66' : 'background:' + c + '12;color:' + c + '66;border:1px solid ' + c + '30');
   }
 
   function gaugeCells() {
@@ -97,13 +99,12 @@
       var r = records[i];
       var col = i === 0 ? AMBER : '#E8963A';
       var cr = CROWNS[i];
-      var row = 'display:flex;align-items:center;gap:18px;padding:14px 18px;border-radius:14px;' + (i === 0 ? 'background:#2A1610;border:1px solid #6B4318' : 'border:1px solid transparent;border-top-color:#2E1B17');
-      html += '<div style="' + row + '">' +
-        '<div style="width: 48px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center">' +
-        (cr ? crownSvg(cr) : '<div style="font-size: 36px; color: #C9B3AC">' + (i + 1) + '</div>') +
+      html += '<div class="hall-row' + (i === 0 ? ' top' : '') + '">' +
+        '<div class="hall-mark">' +
+        (cr ? crownSvg(cr) : '<div class="hall-place">' + (i + 1) + '</div>') +
         '</div>' +
-        '<div style="flex-grow: 1; min-width: 0; font-size: 30px; color: ' + (r ? '#E9DAD5' : '#5A4540') + '; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">' + (r ? esc(r.name) : '-') + '</div>' +
-        Seg.display(r ? Seg.pad(r.score) : '    ', 40, col) +
+        '<div class="hall-name" style="color: ' + (r ? '#E9DAD5' : '#5A4540') + '">' + (r ? esc(r.name) : '-') + '</div>' +
+        '<div class="hall-score">' + Seg.display(r ? Seg.pad(r.score) : '    ', 40, col) + '</div>' +
         '</div>';
     }
     return html;
@@ -111,23 +112,21 @@
 
   // 배너 아래 줄: 대기 / 측정 / 결과(내 순위)
   function bannerBottom(phase, g, res) {
-    var h = 'height: 78px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; white-space: nowrap';
     if (phase === 'measuring') {
       var p = player(P1_COLOR, g.p1.samples, g.samplesNeeded, g.p1.score);
-      return '<div style="' + h + '"><div style="font-size: 30px; color: #E9DAD5">측정 ' + p.samples + ' / ' + g.samplesNeeded + ' · 최고 ' + p.best + '</div>' +
-        '<div style="width: 520px; height: 10px; border-radius: 5px; background: #2E1B17; overflow: hidden"><div style="' + p.bar + '"></div></div></div>';
+      return '<div class="bb"><div class="bb-progress">측정 ' + p.samples + ' / ' + g.samplesNeeded + ' · 최고 ' + p.best + '</div>' +
+        '<div class="bb-bar"><div style="' + p.bar + '"></div></div></div>';
     }
     if (phase === 'result') {
       var inner;
       if (res.place) {
-        inner = '<span style="font-size: 60px; color: ' + AMBER + '; text-shadow: 0 0 18px ' + AMBER + ', 0 0 44px ' + AMBER + '80">전체 ' + res.place + '위</span>' +
-          '<span style="font-size: 28px; color: #C9B3AC; margin-left: 20px">' + res.total + '개 기록 중</span>';
+        inner = '<span class="bb-place">전체 ' + res.place + '위</span><span class="bb-total">' + res.total + '개 기록 중</span>';
       } else {
-        inner = '<span style="font-size: 44px; color: #C9B3AC">기록이 없습니다</span>';
+        inner = '<span class="bb-none">기록이 없습니다</span>';
       }
-      return '<div style="' + h + '"><div>' + inner + '</div></div>';
+      return '<div class="bb"><div>' + inner + '</div></div>';
     }
-    return '<div style="' + h + '"><div style="font-size: 46px; color: #E9DAD5">START 버튼을 누르세요</div></div>';
+    return '<div class="bb"><div class="bb-idle">START 버튼을 누르세요</div></div>';
   }
 
   // 결과 화면: 순위는 명예의 전당 5위 안이 아니어도 전체 기록 기준으로 알려 준다
@@ -165,23 +164,21 @@
   }
 
   function buildMain() {
-    var bannerStyle = 'background:#1C0F0D;border:3px solid ' + AMBER + ';box-shadow:0 0 30px ' + AMBER + '55, inset 0 0 30px ' + AMBER + '22';
-
-    var banner = '<div style="flex: none; box-sizing: border-box; padding: 18px 40px 16px; border-radius: 28px; display: flex; flex-direction: column; align-items: center; gap: 6px; ' + bannerStyle + '">' +
-      '<div id="banner-label" style="font-size: 26px; letter-spacing: 0.3em; color: #C9B3AC; white-space: nowrap"></div>' +
-      '<div id="score-digits" style="height: 110px"></div>' +
+    var banner = '<div class="banner">' +
+      '<div id="banner-label" class="banner-label"></div>' +
+      '<div class="score-zoom"><div id="score-digits" style="height: 110px"></div></div>' +
       '<div id="banner-bottom"></div>' +
       '</div>';
 
-    var hall = '<div style="flex: 0 1 auto; min-height: 0; box-sizing: border-box; padding: 20px 32px; border-radius: 24px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 10px; overflow: hidden">' +
-      '<h2 style="margin: 0 0 4px; font-size: 44px; font-weight: 400; text-align: center; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.55)">명예의 전당</h2>' +
-      '<div id="hall-rows" style="display: flex; flex-direction: column; gap: 10px"></div></div>';
+    var hall = '<div class="hall">' +
+      '<h2 class="hall-title">명예의 전당</h2>' +
+      '<div id="hall-rows" class="hall-rows"></div></div>';
 
-    var gauge = function (id) { return '<div id="' + id + '" style="width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px">' + gaugeCells() + '</div>'; };
+    var gauge = function (id) { return '<div id="' + id + '" class="gauge">' + gaugeCells() + '</div>'; };
     $('main').innerHTML =
-      '<div style="flex: 1; min-height: 0; display: flex; justify-content: space-between; gap: 54px">' +
+      '<div class="main-row">' +
       gauge('gauge-l') +
-      '<div style="flex: 0 1 840px; min-width: 0; display: flex; flex-direction: column; justify-content: space-evenly; gap: 26px">' + banner + hall + '</div>' +
+      '<div class="main-center">' + banner + hall + '</div>' +
       gauge('gauge-r') +
       '</div>';
     drawn = { p1: -1, level: -1 }; // 새로 만든 칸이라 다시 그리기
