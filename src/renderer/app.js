@@ -729,7 +729,7 @@
   }
 
   // ───────────────────────── 확인 창 (window.confirm 대신, #stage 안에 그려서 화면 배율을 따른다) ─────────────────────────
-  // askConfirm({ title, message, ok, cancel, danger }) → Promise<boolean>. Enter: 확인, Esc·바깥 클릭: 취소
+  // askConfirm({ title, message, ok, cancel, danger }) → Promise<boolean>. Enter: 포커스된 버튼, Esc·바깥 클릭: 취소
   var askDone = null; // 열려 있으면 닫는 함수
 
   function askConfirm(o) {
@@ -761,7 +761,7 @@
     e.stopPropagation(); // 관리자 화면 Esc, 시뮬레이션 키로 새지 않게
     if (!askDone || e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape') { e.preventDefault(); askDone(false); }
-    else if (e.key === 'Enter') { e.preventDefault(); askDone(true); }
+    else if (e.key === 'Enter') { e.preventDefault(); askDone(document.activeElement === $('ask-ok')); } // 지우기 창은 취소에 포커스가 있어 Enter 한 번으로 지워지지 않는다
     else if (e.key === 'Tab') { // 포커스는 두 버튼 사이에서만 돈다
       e.preventDefault();
       (document.activeElement === $('ask-ok') ? $('ask-cancel') : $('ask-ok')).focus();
