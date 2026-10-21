@@ -104,7 +104,7 @@ body.mac-titlebar #main { padding-top: 44px; }
 .bb-place { font-size: calc(60px + 28px * var(--tall)); color: #FFB21E; text-shadow: 0 0 18px #FFB21E, 0 0 44px #FFB21E80; }
 .bb-total { font-size: calc(28px + 12px * var(--tall)); color: #C9B3AC; margin-left: calc(20px + 8px * var(--tall)); }
 .bb-none { font-size: calc(44px + 18px * var(--tall)); color: #C9B3AC; }
-.bb-idle { font-size: calc(46px + 20px * var(--tall)); color: #E9DAD5; cursor: pointer; transition: color 0.15s, text-shadow 0.15s; }
+.bb-idle { font-size: calc(46px + 20px * var(--tall)); color: #E9DAD5; letter-spacing: 0.06em; cursor: pointer; transition: color 0.15s, text-shadow 0.15s; }
 .bb-idle:hover { color: #FFD27A; text-shadow: 0 0 18px rgba(255,178,30,0.55); }
 .hall {
   flex: var(--tall) 1 auto; min-height: 0; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;

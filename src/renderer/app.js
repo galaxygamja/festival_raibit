@@ -129,7 +129,7 @@
       }
       return '<div class="bb"><div>' + inner + '</div></div>';
     }
-    return '<div class="bb"><div class="bb-idle">START 버튼을 누르세요</div></div>';
+    return '<div class="bb"><div class="bb-idle">PRESS START</div></div>';
   }
 
   // 결과 화면: 순위는 명예의 전당 5위 안이 아니어도 전체 기록 기준으로 알려 준다

@@ -255,7 +255,7 @@ function setupMenu() {
 function setupIpc() {
   ipcMain.handle('state:get', () => payload());
   ipcMain.handle('game:start', () => requestStart(true));
-  // 관중 화면의 "START 버튼을 누르세요" 클릭 = START 버튼 (이름 받기 규칙도 같음)
+  // 관중 화면의 "PRESS START" 클릭 = START 버튼 (이름 받기 규칙도 같음)
   ipcMain.handle('game:press', () => requestStart(false));
   // 결과 화면 → 대기 화면 (기록은 이미 저장됨)
   ipcMain.handle('game:idle', () => {
