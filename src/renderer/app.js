@@ -385,7 +385,6 @@
     var busy = g.phase === 'measuring';
     $('btn-start').disabled = busy;
     $('btn-stop').disabled = !busy;
-    $('btn-idle').disabled = g.phase !== 'result';
     $('btn-reset-records').disabled = busy;
     $('ask-name').checked = !!state.settings.askName;
     var nm = state.name || {};
@@ -661,7 +660,6 @@
   var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   $('shortcut').textContent = isMac ? 'Control + D' : 'Ctrl + D';
   $('fs-shortcut').textContent = isMac ? 'F11 / Control + Cmd + F' : 'F11';
-  $('idle-shortcut').textContent = isMac ? 'Control + A' : 'Ctrl + A';
   $('name-shortcut').textContent = $('name-shortcut2').textContent = isMac ? 'Control + F' : 'Ctrl + F';
 
   // macOS: 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
@@ -799,7 +797,6 @@
   $('btn-start').addEventListener('click', function () { api.start(); });
   $('main').addEventListener('click', function (e) { if (e.target.closest('.bb-idle')) api.press(); });
   $('btn-stop').addEventListener('click', function () { api.stop(); });
-  $('btn-idle').addEventListener('click', function () { api.toIdle(); });
   $('btn-save-names').addEventListener('click', saveRecords);
   $('btn-toggle-records').addEventListener('click', function () {
     showAll = !showAll;
