@@ -1,7 +1,7 @@
 {
   "name": "raibit-scoreboard",
   "productName": "raibitScoreboard",
-  "version": "2.1.10",
+  "version": "2.1.12",
   "description": "raibitScoreboard - 근전도 기록 측정",
   "main": "src/main/main.js",
   "private": true,
@@ -16,9 +16,11 @@
   "build": {
     "appId": "school.festival.raibitscoreboard",
     "productName": "raibitScoreboard",
+    "icon": "src/assets/icon.png",
     "npmRebuild": false,
     "files": [
       "src/**/*",
+      "!src/main/electron-memo/**",
       "package.json"
     ],
     "asarUnpack": [

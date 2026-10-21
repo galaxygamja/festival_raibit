@@ -7,6 +7,9 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div id="drag-bar"></div>
+<!-- macOS 관리자 화면의 제목 표시줄: 각 페이지 머리 줄(.page-head)의 제목·버튼을 app.js 가 여기로 옮긴다 -->
+<div id="titlebar"></div>
 <div id="stage">
 
   <!-- 관중용 스코어보드 (Main.dc.html) -->
@@ -14,15 +17,15 @@
 
   <!-- 관리자 화면 (Admin.dc.html) -->
   <div id="admin" class="screen" hidden>
-    <div id="app-version" style="position: absolute; right: 56px; bottom: 12px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
-    <div style="position: absolute; left: 56px; bottom: 14px; font-size: 18px; color: #8E7770; pointer-events: none; white-space: nowrap">관중 화면은 이 창이 닫히면 다시 보입니다 · 열기 <span id="shortcut" style="color: #C9B3AC"></span> · 닫기 <span style="color: #C9B3AC">Esc</span> · 전체화면 <span id="fs-shortcut" style="color: #C9B3AC"></span> · 이름 입력 <span id="name-shortcut" style="color: #C9B3AC"></span></div>
-    <div style="display: flex; align-items: center; gap: 20px">
-      <h1 style="flex: none; white-space: nowrap; margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5)">관리자 모드</h1>
-      <div style="flex-grow: 1"></div>
-      <button type="button" id="btn-page2" title="연결 상태·원시값·RMS 등 진단 정보" style="flex: none; white-space: nowrap; height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer; border-color: #FFB21E; color: #FFB21E">2페이지 · 진단</button>
-      <button type="button" id="btn-page3" title="점수표·신호 필터·이름 받기·설정 파일" style="flex: none; white-space: nowrap; height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer; border-color: #FFB21E; color: #FFB21E">3페이지 · 설정</button>
-      <button type="button" id="btn-fullscreen" style="flex: none; white-space: nowrap; height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer"></button>
-      <button type="button" id="btn-close" style="flex: none; white-space: nowrap; height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer">스코어보드로 돌아가기</button>
+    <div id="app-version" style="position: absolute; right: 16px; bottom: 8px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
+    <div style="position: absolute; left: 56px; bottom: 14px; font-size: 18px; color: #8E7770; pointer-events: none; white-space: nowrap">열기 <span id="shortcut" style="color: #C9B3AC"></span> · 닫기 <span style="color: #C9B3AC">Esc</span> · 전체화면 <span id="fs-shortcut" style="color: #C9B3AC"></span> · 이름 입력 <span id="name-shortcut" style="color: #C9B3AC"></span> · 조작 안내 <span id="guide-shortcut" style="color: #C9B3AC"></span></div>
+    <div class="page-head">
+      <h1 class="page-title">관리자 모드</h1>
+      <div class="page-hint"></div>
+      <button type="button" id="btn-page2" title="연결 상태·원시값·RMS 등 진단 정보" class="btn nav amber">2페이지 · 진단</button>
+      <button type="button" id="btn-page3" title="점수표·신호 필터·이름 받기·설정 파일" class="btn nav amber">3페이지 · 설정</button>
+      <button type="button" id="btn-fullscreen" class="btn nav"></button>
+      <button type="button" id="btn-close" class="btn nav">스코어보드로 돌아가기</button>
     </div>
 
     <div style="flex-grow: 1; min-height: 0; display: flex; gap: 32px">
@@ -38,7 +41,7 @@
         </div>
         <div id="rows" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px"></div>
         <div style="flex: none; display: flex; align-items: center; gap: 16px">
-          <div id="names-msg" style="flex-grow: 1; min-width: 0; font-size: 19px; color: #B8A29B">이름·점수를 고친 뒤 저장하세요.</div>
+          <div id="names-msg" style="flex-grow: 1; min-width: 0; font-size: 19px; color: #B8A29B"></div>
           <button type="button" id="btn-reset-records" style="flex: none; height: 56px; padding: 0 22px; border-radius: 14px; border: 2px solid #FF8A7A; background: transparent; color: #FF8A7A; font-family: inherit; font-size: 22px; cursor: pointer; white-space: nowrap">기록 전체 삭제</button>
           <button type="button" id="btn-save-names" style="flex: none; white-space: nowrap; height: 56px; padding: 0 30px; border-radius: 14px; border: 0; background: #FFB21E; color: #1A0D0B; font-family: inherit; font-size: 26px; cursor: pointer; box-shadow: 0 0 22px rgba(255,178,30,0.45)">변경 저장</button>
         </div>
@@ -47,8 +50,10 @@
       <div style="width: 480px; flex: none; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto">
 
         <div style="box-sizing: border-box; padding: 14px 22px; border-radius: 24px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px">
-          <h2 style="margin: 0; font-size: 28px; font-weight: 400">경기 제어</h2>
-          <div style="font-size: 22px; color: #C9B3AC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">현재 상태: <span id="state-text"></span></div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+            <h2 style="margin: 0; font-size: 28px; font-weight: 400">경기 제어</h2>
+            <span id="state-text" style="font-size: 20px; white-space: nowrap"></span>
+          </div>
           <button type="button" id="btn-start" title="START 버튼과 같습니다" style="height: 56px; flex: none; border-radius: 16px; border: 0; background: #FF4A1C; color: #1A0D0B; font-family: inherit; font-size: 30px; cursor: pointer; box-shadow: 0 0 26px rgba(255,74,28,0.5)">측정 시작</button>
           <button type="button" id="btn-stop" title="중지하면 기록이 남지 않습니다" style="height: 42px; flex: none; border-radius: 16px; border: 2px solid #FF8A7A; background: transparent; color: #FF8A7A; font-family: inherit; font-size: 24px; cursor: pointer">측정 중지 · 기록하지 않음</button>
           <div style="display: flex; align-items: center; gap: 12px">
@@ -56,7 +61,6 @@
               <input type="checkbox" id="ask-name" style="width: 20px; height: 20px; accent-color: #FFB21E; margin: 0">
               이름 받고 시작
             </label>
-            <div id="next-name" style="flex: 1; min-width: 0; font-size: 18px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right"></div>
           </div>
         </div>
 
@@ -76,7 +80,6 @@
               <input type="checkbox" id="sim-toggle" style="width: 18px; height: 18px; accent-color: #FFB21E; margin: 0">
               시뮬레이션
             </label>
-            <button type="button" id="btn-quit" style="height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid #5A3A33; background: transparent; color: #B8A29B; font-family: inherit; font-size: 16px; cursor: pointer">앱 종료</button>
           </div>
           <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center">
             <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
@@ -92,12 +95,12 @@
   </div>
 
   <div id="diag" class="screen" hidden>
-    <div id="diag-version" style="position: absolute; right: 56px; bottom: 12px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
-    <div style="display: flex; align-items: center; gap: 20px">
-      <h1 style="margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); white-space: nowrap">관리자 모드 · 진단</h1>
-      <div style="flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">실시간 연결·신호 확인 · 닫기 Esc</div>
-      <button type="button" id="btn-page1" style="height: 52px; padding: 0 22px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 24px; cursor: pointer; white-space: nowrap">‹ 1페이지 · 기록·설정</button>
-      <button type="button" id="btn-close2" style="height: 52px; padding: 0 22px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 24px; cursor: pointer; white-space: nowrap">스코어보드로 돌아가기</button>
+    <div id="diag-version" style="position: absolute; right: 16px; bottom: 8px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
+    <div class="page-head">
+      <h1 class="page-title">관리자 모드 · 진단</h1>
+      <div class="page-hint"></div>
+      <button type="button" id="btn-page1" class="btn nav">‹ 1페이지 · 기록·설정</button>
+      <button type="button" id="btn-close2" class="btn nav">스코어보드로 돌아가기</button>
     </div>
 
     <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: 560px minmax(0, 1fr) minmax(0, 1fr); gap: 16px">
@@ -180,10 +183,10 @@
   </div>
 
   <div id="settings" class="screen" hidden>
-    <div id="settings-version" style="position: absolute; right: 56px; bottom: 12px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
-    <div style="display: flex; align-items: center; gap: 16px">
-      <h1 style="margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); white-space: nowrap">관리자 모드 · 설정</h1>
-      <div style="flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">새 노트북에서는 오른쪽 위 "자동 보정"부터</div>
+    <div id="settings-version" style="position: absolute; right: 16px; bottom: 8px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
+    <div class="page-head">
+      <h1 class="page-title">관리자 모드 · 설정</h1>
+      <div class="page-hint">새 노트북에서는 오른쪽 위 "자동 보정"부터</div>
       <button type="button" id="btn-p3-page1" class="btn nav">‹ 1페이지</button>
       <button type="button" id="btn-p3-page2" class="btn nav">2페이지 · 진단</button>
       <button type="button" id="btn-close3" class="btn nav">스코어보드로 돌아가기</button>
@@ -216,12 +219,12 @@
         <div class="step">
           <div class="step-n">2</div>
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
-            <div class="step-t">점수 곡선 <span class="hint" style="font-size: 17px">· 오른쪽일수록 약하게 쥐어도 점수가 잘 나오고, 높은 점수는 올리기 어렵습니다</span></div>
+            <div class="step-t">점수 곡선</div>
             <div id="sc-presets" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px"></div>
           </div>
         </div>
 
-        <canvas id="t-graph" width="1640" height="480" style="width: 820px; height: 240px; border-radius: 12px; background: #120807; flex: none; cursor: crosshair; touch-action: none"></canvas>
+        <canvas id="t-graph" width="1640" height="480" style="width: 100%; min-height: 240px; flex: 1 1 0; border-radius: 12px; background: #120807; cursor: crosshair; touch-action: none"></canvas>
         <div id="sc-examples" style="display: flex; gap: 8px; flex: none"></div>
 
         <div style="display: flex; gap: 10px; align-items: center; flex: none">
@@ -239,7 +242,6 @@
       <div style="display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto">
         <div class="card" style="flex: none; border-color: #FFB21E">
           <h2>자동 보정</h2>
-          <div class="hint" style="font-size: 17px; color: #B8A29B">이 노트북·이 장소의 잡음을 재서 채널·전원·영점·여유·고역을 고르고, 최대 힘으로 기준 힘도 잡습니다. 결과를 보고 적용할지 정합니다.</div>
           <div style="display: flex; gap: 10px">
             <button type="button" id="btn-cal-full" class="btn amber" style="flex: 1; height: 48px; font-size: 22px">자동 보정 (12초)</button>
             <button type="button" id="btn-cal-noise" class="btn" style="height: 48px" title="쉬는 동안만 재서 전원·영점·여유만 다시 맞춥니다">잡음만 (5초)</button>
@@ -247,7 +249,7 @@
           <div id="cal-last" class="hint"></div>
         </div>
         <div class="card" style="flex: none">
-          <h2>신호 <span class="hint" style="font-size: 17px">· 직접 조정 (보통은 자동 보정이 맞춤)</span></h2>
+          <h2>직접 보정</h2>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
             <label class="field" title="센서가 꽂힌 SpikerBox 채널"><span>채널</span><select id="s-channel"><option value="1">1</option><option value="2">2</option></select></label>
             <label class="field" title="한국·미국 60 Hz, 유럽·일본 동부 등 50 Hz"><span>전원</span><select id="s-mains"><option value="60">60 Hz</option><option value="50">50 Hz</option></select></label>
@@ -258,7 +260,6 @@
           </div>
           <div style="display: flex; gap: 10px; align-items: center">
             <button type="button" id="btn-s-zero" class="btn">영점만 (3초)</button>
-            <div id="s-live" class="hint" style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"></div>
           </div>
         </div>
         <div class="card" style="flex: none">
@@ -267,7 +268,6 @@
             <input type="checkbox" id="s-askname" style="width: 22px; height: 22px; accent-color: #FFB21E; margin: 0">
             이름 받고 시작 (명예의 전당에 들면 폭죽)
           </label>
-          <div class="hint">켜면 START 를 눌렀을 때 이름이 없으면 입력창이 뜹니다. 미리 넣으려면 관중 화면에서 <span id="name-shortcut2"></span>. 끄면 이름 없이(ㅇㅇㅇ) 바로 시작합니다.</div>
         </div>
         <div class="card" style="flex: none">
           <h2>설정 파일</h2>
@@ -314,7 +314,28 @@
     <div style="width: 760px; box-sizing: border-box; padding: 36px 44px; border-radius: 28px; background: #1C0F0D; border: 3px solid #FFB21E; box-shadow: 0 0 40px rgba(255,178,30,0.45); display: flex; flex-direction: column; gap: 18px">
       <div style="font-size: 46px; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5)">도전자 이름</div>
       <input type="text" id="name-input" maxlength="20" autocomplete="off" spellcheck="false" aria-label="도전자 이름" style="box-sizing: border-box; height: 84px; padding: 0 24px; border-radius: 16px; font-family: inherit; font-size: 48px; color: #F3E6E1; background: #120807; border: 3px solid #4A2E28; outline: none">
-      <div id="name-hint" style="font-size: 24px; color: #C9B3AC"></div>
+    </div>
+  </div>
+
+  <!-- 조작 안내 (관리자 화면에서 Control + /) : 내용은 app.js 가 채운다 -->
+  <div id="guide-modal" hidden>
+    <div class="guide-box" role="dialog" aria-modal="true" aria-labelledby="guide-title" tabindex="-1">
+      <div class="guide-head">
+        <div id="guide-title" class="guide-title">조작 안내</div>
+        <div class="guide-close"><span class="kc">Esc</span> 닫기</div>
+      </div>
+      <div id="guide-cols" class="guide-cols"></div>
+    </div>
+  </div>
+
+  <div id="ask-modal" hidden>
+    <div class="ask-box" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-msg">
+      <div id="ask-title" class="ask-title"></div>
+      <div id="ask-msg" class="ask-msg"></div>
+      <div class="ask-btns">
+        <button type="button" id="ask-cancel" class="ask-btn"></button>
+        <button type="button" id="ask-ok" class="ask-btn ok"></button>
+      </div>
     </div>
   </div>
 

@@ -2,7 +2,8 @@
 
 const path = require('path');
 const fs = require('fs');
-const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog } = require('electron');
+const { fileURLToPath } = require('url');
+const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog, session, systemPreferences, screen } = require('electron');
 const { Game, scoreOf, pctOf, DEFAULT_SCORE, CURVE_PRESETS } = require('./game');
 const hall = require('./hall');
 const { Store, normalizeSettings } = require('./store');
@@ -19,6 +20,11 @@ const START_SIM = argv.includes('--sim');
 const FORCE_WINDOWED = argv.includes('--windowed');
 const FORCE_FULLSCREEN = argv.includes('--fullscreen');
 const IS_MAC = process.platform === 'darwin';
+// Windows 창 버튼: 관중 화면은 얇게, 관리자 화면은 제목 표시줄(높이 40, styles.css #titlebar)에 맞춘다
+const TITLEBAR_OVERLAY = {
+  main: { color: '#140A09', symbolColor: '#C9B3AC', height: 24 },
+  admin: { color: '#1C0F0D', symbolColor: '#C9B3AC', height: 39 },
+};
 
 if (!app.requestSingleInstanceLock()) {
   // 두 개가 뜨면 시리얼 포트를 서로 뺏으므로 하나만 실행
@@ -40,6 +46,8 @@ let recorder = null; // 관리자 2페이지 녹화 (userData/recordings)
 const startedAt = Date.now();
 // 도전자 이름: nextName = 다음 측정에 쓸 이름 (Control+F 로 입력), currentName = 지금 측정 중인 사람, namePrompt = START 가 눌렸는데 이름이 없어 입력창을 띄운 상태
 let nextName = null, currentName = null, namePrompt = false;
+// START 가 입력창을 요청할 때마다 1 씩 늘린다. 화면은 닫은 요청 번호를 기억해 늦게 온 옛 요청만 무시한다.
+let namePromptSeq = 0;
 
 // 최근 로그를 진단 화면에서 보이게 모아 둔다
 const logs = [];
@@ -81,7 +89,7 @@ function payload() {
   return {
     game: game.snapshot(t),
     result: lastResult,
-    name: { next: nextName, current: currentName, prompt: namePrompt },
+    name: { next: nextName, current: currentName, prompt: namePrompt, promptSeq: namePromptSeq },
     hall: hallTop,
     recordsRev, // 전체 기록은 크기가 커서 payload 에 싣지 않고, 관리자 화면이 records:get 으로 받아 간다
     recordsTotal: records.length,
@@ -123,6 +131,7 @@ function requestStart(fromAdmin) {
   if (game.phase === 'measuring' || autocal.running) return;
   if (!fromAdmin && settings.askName && !nextName) {
     namePrompt = true;
+    namePromptSeq++;
     push();
     return;
   }
@@ -167,13 +176,25 @@ function saveSettings() {
   }
 }
 
+let windowedBounds = null; // macOS: 전체화면에 들어가기 전 창 위치·크기
+
 /** 전체화면(kiosk) ↔ 창 모드. 고른 방식은 다음 실행 때도 유지된다. */
 // macOS 에서는 setKiosk 가 창 크기를 바꾸지 않는 경우가 있어(상태만 kiosk) 즉시 덮는 simple fullscreen 을 쓴다.
 function applyFullscreen(on) {
   if (IS_MAC) {
     if (!on && win.isFullScreen()) win.setFullScreen(false); // 초록 버튼으로 들어간 전체화면
     if (win.isKiosk()) win.setKiosk(false);
-    win.setSimpleFullScreen(!!on);
+    if (!!on === win.isSimpleFullScreen()) return;
+    // simple fullscreen 은 창 크기를 0.35초 동안 움직여 바꾼다. 들어가기 전에 화면 크기로, 나온 뒤에 원래 크기로
+    // 애니메이션 없이 먼저 맞춰 두면 메뉴 막대 높이만큼(0.1초)만 움직인다. 그동안 화면은 app.js 가 다시 맞추지 않는다.
+    if (on) {
+      windowedBounds = win.getBounds();
+      win.setBounds(screen.getDisplayMatching(windowedBounds).bounds, false);
+      win.setSimpleFullScreen(true);
+    } else {
+      win.setSimpleFullScreen(false);
+      if (windowedBounds) win.setBounds(windowedBounds, false);
+    }
   } else if (on) {
     win.setKiosk(true);
   } else {
@@ -190,7 +211,11 @@ function setFullscreen(on) {
   push();
 }
 
+const ICON = path.join(__dirname, '..', 'assets', 'icon.png');
+
 function createWindow(full) {
+  // 빌드된 앱은 빌드 때 넣은 아이콘을 쓰고, 개발 실행에서만 Dock 아이콘을 바꾼다
+  if (IS_MAC && !app.isPackaged) app.dock.setIcon(ICON);
   win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -198,11 +223,16 @@ function createWindow(full) {
     minHeight: 450,
     center: true,
     backgroundColor: '#140A09',
-    kiosk: full && !IS_MAC,
-    fullscreen: full && !IS_MAC,
+    // macOS 에 fullscreen: false 를 넘기면 초록 버튼의 전체화면이 꺼지므로 Windows 에만 넘긴다
+    ...(IS_MAC ? { fullscreenable: true } : { kiosk: full, fullscreen: full }),
     autoHideMenuBar: true,
+    // 제목 표시줄 없이 화면을 창 끝까지 쓴다 (macOS 신호등 버튼·Windows 창 버튼은 화면 위에 겹쳐 남김)
+    titleBarStyle: 'hidden',
+    // macOS 신호등 버튼은 관리자 화면 제목 표시줄(높이 40, styles.css #titlebar) 세로 가운데에 둔다
+    ...(IS_MAC ? { trafficLightPosition: { x: 16, y: 13 } } : { titleBarOverlay: TITLEBAR_OVERLAY.main }),
     show: false,
     title: 'raibitScoreboard',
+    icon: ICON,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,
@@ -217,8 +247,14 @@ function createWindow(full) {
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.webContents.on('did-finish-load', () => push(true));
   // macOS 초록 버튼 등으로 바뀐 경우도 화면에 반영
-  win.on('enter-full-screen', () => push());
-  win.on('leave-full-screen', () => push());
+  // 초록 버튼으로 고른 방식도 다음 실행 때 유지
+  const rememberFullscreen = () => {
+    settings = { ...settings, fullscreen: isFullscreen() };
+    saveSettings();
+    push();
+  };
+  win.on('enter-full-screen', rememberFullscreen);
+  win.on('leave-full-screen', rememberFullscreen);
   win.on('closed', () => { win = null; });
 }
 
@@ -237,6 +273,15 @@ function setupMenu() {
 function setupIpc() {
   ipcMain.handle('state:get', () => payload());
   ipcMain.handle('game:start', () => requestStart(true));
+  // 관중 화면의 "PRESS START" 클릭 = START 버튼 (이름 받기 규칙도 같음)
+  ipcMain.handle('game:press', () => requestStart(false));
+  // 결과 화면 → 대기 화면 (기록은 이미 저장됨)
+  ipcMain.handle('game:idle', () => {
+    if (game.phase !== 'result') return;
+    game.clear();
+    lastResult = null;
+    push();
+  });
   ipcMain.handle('game:stop', () => {
     // 중지하면 이번 사람 이름은 다음 측정으로 돌려 둔다
     if (game.stop() && currentName && !nextName) nextName = currentName;
@@ -390,10 +435,43 @@ function setupIpc() {
     }
   });
   ipcMain.handle('window:toggleFullscreen', () => setFullscreen(!isFullscreen()));
+  // macOS 제목 표시줄 더블클릭: 시스템 설정(AppleActionOnDoubleClick)대로 확대·최소화
+  ipcMain.handle('window:titlebarDoubleClick', () => {
+    if (!win || win.isDestroyed() || isFullscreen()) return;
+    const action = IS_MAC ? systemPreferences.getUserDefault('AppleActionOnDoubleClick', 'string') : '';
+    if (action === 'None') return;
+    if (action === 'Minimize') win.minimize();
+    else if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+  ipcMain.handle('window:setAdminTitlebar', (_e, on) => {
+    if (IS_MAC || !win || win.isDestroyed()) return;
+    win.setTitleBarOverlay(on ? TITLEBAR_OVERLAY.admin : TITLEBAR_OVERLAY.main);
+  });
   ipcMain.handle('app:quit', () => app.quit());
 }
 
-app.whenReady().then(() => {
+// 개발 실행에서만: Ctrl+G 로 화면 요소에 메모를 남기는 레이어 (빌드에는 들어가지 않음)
+async function installMemo() {
+  try {
+    const root = path.join(__dirname, '..', '..');
+    const renderer = path.join(__dirname, '..', 'renderer');
+    const { installMemoLayer } = await import('./electron-memo/main.mjs');
+    await installMemoLayer({
+      app,
+      session: session.defaultSession,
+      ipcMain,
+      storeDir: path.join(root, '.electron-memos'),
+      isTrustedUrl: (url) => url.startsWith('file://') && fileURLToPath(url).startsWith(renderer),
+      locale: 'ko',
+      repoRoot: root,
+    });
+  } catch (err) {
+    console.warn('[memo] 메모 레이어를 켜지 못했습니다', err);
+  }
+}
+
+app.whenReady().then(async () => {
   store = new Store(app.getPath('userData'));
   settings = store.loadSettings();
   recorder = new Recorder({ dir: path.join(store.dir, 'recordings') });
@@ -433,6 +511,7 @@ app.whenReady().then(() => {
 
   setupMenu();
   setupIpc();
+  if (!app.isPackaged) await installMemo();
   createWindow(FORCE_WINDOWED ? false : FORCE_FULLSCREEN ? true : settings.fullscreen);
   serial.start();
   if (START_SIM) sim.setEnabled(true);

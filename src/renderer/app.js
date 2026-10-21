@@ -18,12 +18,46 @@
     });
   }
 
-  // ───────────────────────── 화면 비율 유지 확대·축소 ─────────────────────────
+  // ───────────────────────── 창 크기에 맞춰 확대·축소 ─────────────────────────
+  // 1440×900 을 최소 크기로 비율을 유지해 확대하고, 남는 방향으로 무대(디자인 px)를 늘려 창을 채운다.
+  // 가로가 세로의 2.4배를 넘으면 그 이상은 늘리지 않고 좌우를 비운다.
+  var DESIGN_W = 1440, DESIGN_H = 900, MAX_RATIO = 2.4;
+  var stageW = DESIGN_W, stageH = DESIGN_H;
+  // 관리자 화면에서는 창 맨 위 제목 표시줄(#titlebar, 창 px) 아래 영역에 무대를 맞춘다
+  var TITLEBAR_H = 40;
+  // macOS 전체화면 전환은 창이 메뉴 막대 높이만큼 0.1초 움직인다. 그 중간 크기에는 맞추지 않는다:
+  // 들어갈 때는 바로 화면 전체 크기에 맞추고, 나올 때는 창이 줄어든 순간 한 번에 맞춘다.
+  var fsTransition = null; // 'enter' | 'exit' (전환 중일 때만)
+  function toggleFullscreenSnap() {
+    if (isMac) {
+      fsTransition = state && state.fullscreen ? 'exit' : 'enter';
+      if (fsTransition === 'enter') layout(screen.width, screen.height);
+      setTimeout(function () { fsTransition = null; fit(); }, 300);
+    }
+    api.toggleFullscreen();
+  }
+
   function fit() {
+    if (fsTransition === 'enter') return;
+    if (fsTransition === 'exit') {
+      if (window.innerWidth >= screen.width) return; // 아직 화면 전체 크기
+      fsTransition = null;
+    }
+    layout(window.innerWidth, window.innerHeight);
+  }
+
+  function layout(winW, winH) {
     var stage = $('stage');
-    var s = Math.min(window.innerWidth / 1440, window.innerHeight / 900);
-    var x = (window.innerWidth - 1440 * s) / 2, y = (window.innerHeight - 900 * s) / 2;
-    stage.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
+    var top = document.body.classList.contains('app-titlebar') && document.body.classList.contains('admin-open') ? TITLEBAR_H : 0;
+    var w = winW, h = winH - top;
+    var s = Math.min(w / DESIGN_W, h / DESIGN_H);
+    stageH = h / s;
+    stageW = Math.min(w / s, stageH * MAX_RATIO);
+    stage.style.width = stageW + 'px';
+    stage.style.height = stageH + 'px';
+    stage.style.transform = 'translate(' + (w - stageW * s) / 2 + 'px,' + top + 'px) scale(' + s + ')';
+    // 세로로 긴 창: 관중 화면의 가운데 칸(점수·명예의 전당)을 키우는 정도 (높이 900 → 0, 1900 → 1, 최대 1.5. CSS --tall)
+    stage.style.setProperty('--tall', Math.max(0, Math.min(1.5, (stageH - DESIGN_H) / 1000)).toFixed(4));
   }
   window.addEventListener('resize', fit);
   fit();
@@ -41,14 +75,24 @@
     return Math.max(0, Math.min(15, Math.round((v / MAX_SCORE) * 15)));
   }
 
-  // 왼쪽·오른쪽에 똑같이 놓는 세로 게이지 (아래 1 → 위 15). 같은 값을 두 개에 그린다.
-  function gaugeHtml(v) {
-    var level = levelOf(v), html = '';
-    for (var i = 15; i >= 1; i--) {
-      var c = RAINBOW[i - 1], lit = i <= level;
-      html += '<div style="flex:1;min-height:0;border-radius:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:24px;' + (lit ? 'background:' + c + ';color:#1A0D0B;box-shadow:0 0 10px ' + c + ',0 0 26px ' + c + '66' : 'background:' + c + '12;color:' + c + '66;border:1px solid ' + c + '30') + '">' + i + '</div>';
-    }
+  // 왼쪽·오른쪽에 똑같이 놓는 세로 게이지 (아래 1 → 위 15). 칸은 한 번 만들고, 단계가 바뀔 때만 칸 스타일을 바꾼다.
+  function cellStyle(i, lit) {
+    var c = RAINBOW[i - 1];
+    return 'flex:1;min-height:0;border-radius:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:calc(24px + 14px * var(--tall));' + (lit ? 'background:' + c + ';color:#1A0D0B;box-shadow:0 0 10px ' + c + ',0 0 26px ' + c + '66' : 'background:' + c + '12;color:' + c + '66;border:1px solid ' + c + '30');
+  }
+
+  function gaugeCells() {
+    var html = '';
+    for (var i = 15; i >= 1; i--) html += '<div style="' + cellStyle(i, false) + '">' + i + '</div>';
     return html;
+  }
+
+  function setGauge(el, level, prev) {
+    for (var i = 1; i <= 15; i++) {
+      var lit = i <= level;
+      if (prev >= 0 && lit === (i <= prev)) continue;
+      el.children[15 - i].style.cssText = cellStyle(i, lit);
+    }
   }
 
   function player(color, samples, needed, best) {
@@ -79,13 +123,12 @@
       var r = records[i];
       var col = i === 0 ? AMBER : '#E8963A';
       var cr = CROWNS[i];
-      var row = 'display:flex;align-items:center;gap:18px;padding:14px 18px;border-radius:14px;' + (i === 0 ? 'background:#2A1610;border:1px solid #6B4318' : 'border:1px solid transparent;border-top-color:#2E1B17');
-      html += '<div style="' + row + '">' +
-        '<div style="width: 48px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center">' +
-        (cr ? crownSvg(cr) : '<div style="font-size: 36px; color: #C9B3AC">' + (i + 1) + '</div>') +
+      html += '<div class="hall-row' + (i === 0 ? ' top' : '') + '">' +
+        '<div class="hall-mark">' +
+        (cr ? crownSvg(cr) : '<div class="hall-place">' + (i + 1) + '</div>') +
         '</div>' +
-        '<div style="flex-grow: 1; min-width: 0; font-size: 30px; color: ' + (r ? '#E9DAD5' : '#5A4540') + '; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">' + (r ? esc(r.name) : '-') + '</div>' +
-        Seg.display(r ? Seg.pad(r.score) : '    ', 40, col) +
+        '<div class="hall-name" style="color: ' + (r ? '#E9DAD5' : '#5A4540') + '">' + (r ? esc(r.name) : '-') + '</div>' +
+        '<div class="hall-score">' + Seg.display(r ? Seg.pad(r.score) : '    ', 40, col) + '</div>' +
         '</div>';
     }
     return html;
@@ -93,23 +136,21 @@
 
   // 배너 아래 줄: 대기 / 측정 / 결과(내 순위)
   function bannerBottom(phase, g, res) {
-    var h = 'height: 78px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; white-space: nowrap';
     if (phase === 'measuring') {
       var p = player(P1_COLOR, g.p1.samples, g.samplesNeeded, g.p1.score);
-      return '<div style="' + h + '"><div style="font-size: 30px; color: #E9DAD5">측정 ' + p.samples + ' / ' + g.samplesNeeded + ' · 최고 ' + p.best + '</div>' +
-        '<div style="width: 520px; height: 10px; border-radius: 5px; background: #2E1B17; overflow: hidden"><div style="' + p.bar + '"></div></div></div>';
+      return '<div class="bb"><div class="bb-progress">측정 ' + p.samples + ' / ' + g.samplesNeeded + ' · 최고 ' + p.best + '</div>' +
+        '<div class="bb-bar"><div style="' + p.bar + '"></div></div></div>';
     }
     if (phase === 'result') {
       var inner;
       if (res.place) {
-        inner = '<span style="font-size: 60px; color: ' + AMBER + '; text-shadow: 0 0 18px ' + AMBER + ', 0 0 44px ' + AMBER + '80">전체 ' + res.place + '위</span>' +
-          '<span style="font-size: 28px; color: #C9B3AC; margin-left: 20px">' + res.total + '개 기록 중</span>';
+        inner = '<span class="bb-place">전체 ' + res.place + '위</span><span class="bb-total">' + res.total + '개 기록 중</span>';
       } else {
-        inner = '<span style="font-size: 44px; color: #C9B3AC">기록이 없습니다</span>';
+        inner = '<span class="bb-none">기록이 없습니다</span>';
       }
-      return '<div style="' + h + '"><div>' + inner + '</div></div>';
+      return '<div class="bb"><div>' + inner + '</div></div>';
     }
-    return '<div style="' + h + '"><div style="font-size: 46px; color: #E9DAD5">START 버튼을 누르세요</div></div>';
+    return '<div class="bb"><div class="bb-idle">PRESS START</div></div>';
   }
 
   // 결과 화면: 순위는 명예의 전당 5위 안이 아니어도 전체 기록 기준으로 알려 준다
@@ -121,38 +162,49 @@
     };
   }
 
+  // 내용이 바뀐 칸만 다시 그린다 (측정 중 0.1초마다 전체를 다시 만들면 빛 번짐을 매번 다시 그려서 끊긴다)
+  function setHtml(el, html) {
+    if (el.__html === html) return;
+    el.__html = html;
+    el.innerHTML = html;
+  }
+
   function renderMain() {
     var g = state.game;
     var phase = g.phase;
     var res = resultInfo(phase === 'result' ? state.result : null);
     var nm = state.name || {};
     var who = function (n) { return n ? esc(n) + '님 · ' : ''; };
-    var resultName = phase === 'result' && state.result ? state.result.name : null;
     var labels = {
-      idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '다음 경기 대기',
+      idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '',
       measuring: who(nm.current) + '5초 동안 힘껏 쥐세요',
-      result: who(resultName) + (res.rank ? '최종 기록 · 명예의 전당 ' + res.rank + '위!' : '최종 기록'),
+      result: '', // 결과 화면은 탭 없이 점수·순위만
     };
-    var bannerStyle = 'background:#1C0F0D;border:3px solid ' + AMBER + ';box-shadow:0 0 30px ' + AMBER + '55, inset 0 0 30px ' + AMBER + '22';
+    if (!$('banner-label')) buildMain();
+    setHtml($('banner-label'), labels[phase]);
+    setHtml($('banner-bottom'), bannerBottom(phase, g, res));
+    setHtml($('hall-rows'), hallRows(state.hall));
+  }
 
-    var banner = '<div style="flex: none; box-sizing: border-box; padding: 18px 40px 16px; border-radius: 28px; display: flex; flex-direction: column; align-items: center; gap: 6px; ' + bannerStyle + '">' +
-      '<div style="font-size: 26px; letter-spacing: 0.3em; color: #C9B3AC; white-space: nowrap">' + labels[phase] + '</div>' +
-      '<div id="score-digits" style="height: 110px"></div>' +
-      bannerBottom(phase, g, res) +
+  function buildMain() {
+    var banner = '<div class="banner">' +
+      '<div id="banner-label" class="banner-label"></div>' +
+      '<div class="score-zoom"><div id="score-digits" style="height: 110px"></div></div>' +
+      '<div id="banner-bottom"></div>' +
       '</div>';
 
-    var hall = '<div style="flex: 1; min-height: 0; box-sizing: border-box; padding: 20px 32px; border-radius: 24px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 10px; overflow: hidden">' +
-      '<h2 style="margin: 0 0 4px; font-size: 44px; font-weight: 400; text-align: center; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.55)">명예의 전당</h2>' +
-      hallRows(state.hall) + '</div>';
+    var hall = '<div class="hall">' +
+      '<h2 class="hall-title">명예의 전당</h2>' +
+      '<div id="hall-rows" class="hall-rows"></div></div>';
 
-    var gauge = function (id) { return '<div id="' + id + '" style="width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px"></div>'; };
+    var gauge = function (id) { return '<div id="' + id + '" class="gauge">' + gaugeCells() + '</div>'; };
     $('main').innerHTML =
-      '<div style="flex: 1; min-height: 0; display: flex; gap: 54px">' +
+      '<div class="main-row">' +
       gauge('gauge-l') +
-      '<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 26px">' + banner + hall + '</div>' +
+      '<div class="main-center">' + banner + hall + '</div>' +
       gauge('gauge-r') +
       '</div>';
-    drawn = { p1: -1 }; // 새로 만든 칸이라 다시 그리기
+    drawn = { p1: -1, level: -1 }; // 새로 만든 칸이라 다시 그리기
     drawPlayers();
   }
 
@@ -161,7 +213,7 @@
   // 측정 중 목표값 = 방금 들어온 값(현재 힘), 그 밖에는 최종 점수(최댓값).
   var SMOOTH_MS = 70;
   var shown = { p1: 0 };
-  var drawn = { p1: -1 };
+  var drawn = { p1: -1, level: -1 };
   var lastFrame = 0;
 
   function targetOf(k) {
@@ -175,8 +227,9 @@
       if (v === drawn[k]) return;
       drawn[k] = v;
       var d = $('score-digits'), gl = $('gauge-l'), gr = $('gauge-r');
-      if (d) d.innerHTML = Seg.display(Seg.pad(v), 110, AMBER);
-      if (gl) { var gh = gaugeHtml(v); gl.innerHTML = gh; if (gr) gr.innerHTML = gh; }
+      if (d) Seg.update(d, Seg.pad(v), 110, AMBER);
+      var level = levelOf(v);
+      if (gl && level !== drawn.level) { setGauge(gl, level, drawn.level); setGauge(gr, level, drawn.level); drawn.level = level; }
     });
   }
 
@@ -199,10 +252,9 @@
   var MEDAL = ['#FFC83D', '#D3DAE2', '#D88A4E'];
   var renderedHallKey = '';
 
+  // 경기 제어 카드 우상단 상태: 측정 중 / 대기 중 (결과 화면도 대기 중)
   function stateLabel(g) {
-    if (g.phase === 'measuring') return ['측정 중', AMBER];
-    if (g.phase === 'result') return ['기록 ' + g.p1.score + '점 · 다음 도전 대기', AMBER];
-    return ['대기 중 · START 대기', '#C9B3AC'];
+    return g.phase === 'measuring' ? ['측정 중', '#7BE08A'] : ['대기 중', '#8E7770'];
   }
 
   // 전체 기록은 payload 에 없고, recordsRev 가 바뀔 때마다 records:get 으로 받아 온다 (점수 내림차순)
@@ -350,18 +402,17 @@
     var lbl = stateLabel(g);
     $('state-text').textContent = lbl[0];
     $('state-text').style.color = lbl[1];
+    $('state-text').style.textShadow = g.phase === 'measuring' ? '0 0 10px rgba(123,224,138,0.55)' : 'none';
     var busy = g.phase === 'measuring';
     $('btn-start').disabled = busy;
     $('btn-stop').disabled = !busy;
     $('btn-reset-records').disabled = busy;
     $('ask-name').checked = !!state.settings.askName;
-    var nm = state.name || {};
-    $('next-name').textContent = nm.current ? '측정 중: ' + nm.current : nm.next ? '다음 도전자: ' + nm.next : '다음 도전자 이름 없음';
 
     renderPorts();
 
     $('sim-toggle').checked = state.sim;
-    $('btn-fullscreen').textContent = state.fullscreen ? '창 모드로 보기' : '전체화면으로 보기';
+    $('btn-fullscreen').textContent = state.fullscreen ? '창 모드' : '전체화면';
     if (state.saveError) {
       $('names-msg').textContent = state.saveError;
       $('names-msg').style.color = '#FF8A7A';
@@ -370,6 +421,7 @@
 
   function render() {
     if (!state) return;
+    document.body.classList.toggle('fullscreen', !!state.fullscreen);
     renderMain();
     if (adminOpen) { if (adminPage === 2) renderDiag(); else if (adminPage === 3) renderSettings(); else renderAdmin(); }
     renderNameModal();
@@ -493,13 +545,14 @@
       ['표시한 시간', counts || null],
       ['파일', r.on ? r.file : r.lastFile ? r.lastFile + ' (저장됨)' : null, !r.on && r.lastFile ? GOOD : null],
       ['오류', r.error, r.error ? BAD : null],
-    ]) + '<div style="font-size: 13px; color: #8E7770; overflow-wrap: anywhere">' + esc(r.dir || '') + '</div>';
+    ]);
   }
 
   function renderDiag() {
     var d = state.diag;
     $('diag-version').textContent = state.version ? 'v' + state.version : '';
     if (!d) return;
+    var set = state.settings || {}, nPts = ((set.score || {}).points || []).length;
     var sig = d.signal, ser = d.serial, ps = state.ports || {}, sb = ps.spikerbox || {}, st = ps.start || {};
     var emg = state.emg || {};
     drawScope(sig);
@@ -609,11 +662,15 @@
     }
   }
 
+  var PAGE_IDS = ['admin', 'diag', 'settings'];
+  var pageHeads = PAGE_IDS.map(function (id) { return $(id).querySelector('.page-head'); });
+
   function showPage(n) {
     adminPage = n;
     $('admin').hidden = n !== 1;
     $('diag').hidden = n !== 2;
     $('settings').hidden = n !== 3;
+    pageHeads.forEach(function (head, i) { if (head.parentNode === $('titlebar')) head.hidden = i !== n - 1; });
     if (document.activeElement) document.activeElement.blur();
     api.setDiag(n === 2);
     if (n === 1) { renderAdminRows(true); renderAdmin(); } else if (n === 2) { renderDiag(); } else { fillSettings(); renderSettings(); }
@@ -623,17 +680,37 @@
   var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   $('shortcut').textContent = isMac ? 'Control + D' : 'Ctrl + D';
   $('fs-shortcut').textContent = isMac ? 'F11 / Control + Cmd + F' : 'F11';
-  $('name-shortcut').textContent = $('name-shortcut2').textContent = isMac ? 'Control + F' : 'Ctrl + F';
+  $('name-shortcut').textContent = isMac ? 'Control + F' : 'Ctrl + F';
+  $('guide-shortcut').textContent = isMac ? 'Control + /' : 'Ctrl + /';
+
+  // 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
+  // macOS 는 신호등 오른쪽에서 버튼을 오른쪽 끝으로, Windows 는 제목·버튼을 왼쪽에 붙이고 오른쪽은 창 버튼 자리로 둔다.
+  document.body.classList.add('app-titlebar', isMac ? 'mac-titlebar' : 'win-titlebar');
+  pageHeads.forEach(function (head) { head.hidden = true; $('titlebar').appendChild(head); });
+  // 빈 곳 더블클릭은 macOS 처럼 창 확대 (시스템 설정의 '제목 막대를 이중 클릭하면'을 따른다). Windows 는 끌기 영역이 직접 처리한다.
+  if (isMac) {
+    $('titlebar').addEventListener('dblclick', function (e) {
+      if (!e.target.closest('button')) api.titlebarDoubleClick();
+    });
+  }
+
+  function setAdminOpen(on) {
+    adminOpen = on;
+    document.body.classList.toggle('admin-open', on);
+    api.setAdminTitlebar(on);
+    fit();
+  }
 
   function openAdmin() {
-    adminOpen = true;
+    setAdminOpen(true);
     releaseSimKeys();
     $('main').hidden = true;
     showPage(1);
   }
 
   function closeAdmin() {
-    adminOpen = false;
+    setAdminOpen(false);
+    closeGuide();
     if (document.activeElement) document.activeElement.blur();
     $('admin').hidden = true;
     $('diag').hidden = true;
@@ -673,15 +750,57 @@
     });
   }
 
+  // ───────────────────────── 확인 창 (window.confirm 대신, #stage 안에 그려서 화면 배율을 따른다) ─────────────────────────
+  // askConfirm({ title, message, ok, cancel, danger }) → Promise<boolean>. Enter: 포커스된 버튼, Esc·바깥 클릭: 취소
+  var askDone = null; // 열려 있으면 닫는 함수
+
+  function askConfirm(o) {
+    if (askDone) askDone(false);
+    releaseSimKeys();
+    var prev = document.activeElement;
+    $('ask-title').textContent = o.title || '';
+    $('ask-msg').textContent = o.message || '';
+    $('ask-ok').textContent = o.ok || '확인';
+    $('ask-cancel').textContent = o.cancel || '취소';
+    $('ask-modal').querySelector('.ask-box').classList.toggle('danger', !!o.danger);
+    $('ask-modal').hidden = false;
+    // 지우기·종료처럼 되돌릴 수 없는 일은 취소 버튼에 먼저 포커스를 둔다
+    (o.danger ? $('ask-cancel') : $('ask-ok')).focus();
+    return new Promise(function (resolve) {
+      askDone = function (yes) {
+        askDone = null;
+        $('ask-modal').hidden = true;
+        if (prev && prev.focus && document.contains(prev)) prev.focus();
+        resolve(yes);
+      };
+    });
+  }
+
+  $('ask-ok').addEventListener('click', function () { if (askDone) askDone(true); });
+  $('ask-cancel').addEventListener('click', function () { if (askDone) askDone(false); });
+  $('ask-modal').addEventListener('click', function (e) { if (e.target === this && askDone) askDone(false); });
+  $('ask-modal').addEventListener('keydown', function (e) {
+    e.stopPropagation(); // 관리자 화면 Esc, 시뮬레이션 키로 새지 않게
+    if (!askDone || e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape') { e.preventDefault(); askDone(false); }
+    else if (e.key === 'Enter') { e.preventDefault(); askDone(document.activeElement === $('ask-ok')); } // 지우기 창은 취소에 포커스가 있어 Enter 한 번으로 지워지지 않는다
+    else if (e.key === 'Tab') { // 포커스는 두 버튼 사이에서만 돈다
+      e.preventDefault();
+      (document.activeElement === $('ask-ok') ? $('ask-cancel') : $('ask-ok')).focus();
+    }
+  });
+
   function deleteRecord(id) {
     var list = visibleRecords(), i = -1;
     for (var k = 0; k < list.length; k++) if (list[k].id === id) i = k;
     if (i < 0) return;
     var d = list[i];
-    if (!window.confirm((i + 1) + '위 ' + d.name + ' (' + d.score + '점) 기록을 지울까요?')) return;
-    api.deleteRecords([id]).then(function (ok) {
-      recordsMsg(ok ? '기록을 지웠습니다.' : '기록 삭제에 실패했습니다.', ok);
-      renderedHallKey = '';
+    askConfirm({ title: (i + 1) + '위 ' + d.name + ' (' + d.score + '점) 기록을 지울까요?', ok: '지우기', danger: true }).then(function (yes) {
+      if (!yes) return;
+      api.deleteRecords([id]).then(function (ok) {
+        recordsMsg(ok ? '기록을 지웠습니다.' : '기록 삭제에 실패했습니다.', ok);
+        renderedHallKey = '';
+      });
     });
   }
 
@@ -698,8 +817,9 @@
     if (b) { api.recLabel(b.dataset.label); b.blur(); }
   });
   $('btn-reconnect2').addEventListener('click', function () { api.reconnect(); });
-  $('btn-fullscreen').addEventListener('click', function () { api.toggleFullscreen(); });
+  $('btn-fullscreen').addEventListener('click', toggleFullscreenSnap);
   $('btn-start').addEventListener('click', function () { api.start(); });
+  $('main').addEventListener('click', function (e) { if (e.target.closest('.bb-idle')) api.press(); });
   $('btn-stop').addEventListener('click', function () { api.stop(); });
   $('btn-save-names').addEventListener('click', saveRecords);
   $('btn-toggle-records').addEventListener('click', function () {
@@ -713,10 +833,12 @@
   });
   $('btn-reset-records').addEventListener('click', function () {
     var n = state ? state.recordsTotal || 0 : 0;
-    if (!window.confirm('기록 ' + n + '개(명예의 전당 포함)를 모두 지울까요?\n(지우기 전 파일은 데이터 폴더에 백업됩니다)')) return;
-    api.resetRecords().then(function (ok) {
-      recordsMsg(ok ? '기록을 모두 지웠습니다.' : '기록 삭제에 실패했습니다.', ok);
-      renderedHallKey = '';
+    askConfirm({ title: '기록 ' + n + '개(명예의 전당 포함)를 모두 지울까요?', message: '지우기 전 파일은 데이터 폴더에 백업됩니다.', ok: '모두 지우기', danger: true }).then(function (yes) {
+      if (!yes) return;
+      api.resetRecords().then(function (ok) {
+        recordsMsg(ok ? '기록을 모두 지웠습니다.' : '기록 삭제에 실패했습니다.', ok);
+        renderedHallKey = '';
+      });
     });
   });
   $('btn-zero').addEventListener('click', function () { if (api.zeroEmg) api.zeroEmg(); });
@@ -726,9 +848,6 @@
   });
   $('btn-reconnect').addEventListener('click', function () { api.reconnect(); });
   $('sim-toggle').addEventListener('change', function (e) { api.setSim(e.target.checked); });
-  $('btn-quit').addEventListener('click', function () {
-    if (window.confirm('앱을 종료할까요?')) api.quit();
-  });
   $('rows').addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.isComposing) saveRecords();
   });
@@ -849,8 +968,9 @@
     $('sc-examples').hidden = open;
     $('btn-t-rows').textContent = open ? '세부 점 닫기 ▴' : '세부 점 고치기 ▾';
     var c = $('t-graph');
-    c.height = open ? 300 : 480;
-    c.style.height = (open ? 150 : 240) + 'px';
+    c.style.flex = open ? 'none' : '1 1 0';
+    c.style.minHeight = open ? '150px' : '240px';
+    c.style.height = open ? '150px' : 'auto';
     if (open) renderTableRows();
   }
 
@@ -860,7 +980,12 @@
   function gy(v, H) { return H - G.B - (v / MAX_SCORE) * (H - G.B - G.T); }
 
   function drawTable(livePct, maxPct) {
-    var c = $('t-graph'), g = c.getContext('2d'), W = c.width, H = c.height, t = sc.points;
+    var c = $('t-graph');
+    // 카드 높이에 맞춰 늘어나는 그래프: 화면 크기의 2배 해상도로 맞춘다
+    var bw = Math.max(1, Math.round(c.clientWidth * 2)), bh = Math.max(1, Math.round(c.clientHeight * 2));
+    if (c.width !== bw) c.width = bw;
+    if (c.height !== bh) c.height = bh;
+    var g = c.getContext('2d'), W = c.width, H = c.height, t = sc.points;
     g.clearRect(0, 0, W, H);
     G.xmax = Math.max(120, t.length ? t[t.length - 1][0] * 1.1 : 120, (livePct || 0) * 1.05, (maxPct || 0) * 1.05);
     var x = function (v) { return gx(v, W); }, y = function (v) { return gy(v, H); };
@@ -935,7 +1060,6 @@
     drawTable(livePct, maxPct);
     $('t-live').textContent = '지금 힘 = 기준의 ' + fmt(livePct, 0) + '% → ' + scoreFromTable(livePct, sc.points) + '점' +
       (maxS ? ' · 마지막 측정 최고 ' + fmt(maxPct, 0) + '% → ' + scoreFromTable(maxPct, sc.points) + '점' : '');
-    $('s-live').textContent = emg.zeroing ? '영점 재는 중… 힘을 빼세요' : '지금 거른 RMS ' + fmt(emg.rms, 1) + ' · 세기 ' + fmt(emg.strength, 1) + ' · 거르기 전 ' + fmt(emg.rmsRaw, 1);
     if (lastZeroing && !emg.zeroing) $('s-rest').value = Math.round((emg.restRms || 0) * 100) / 100; // 영점 잡기가 끝나면 입력칸에 넣는다
     lastZeroing = !!emg.zeroing;
     var busy = g.phase === 'measuring';
@@ -1117,35 +1241,26 @@
 
   // ───────────────────────── 도전자 이름 입력창 ─────────────────────────
   // Control+F 로 미리 넣거나(nameLocal), 이름 받기가 켜진 상태에서 START 가 눌리면(state.name.prompt) 뜬다
-  var nameLocal = false, nameShown = false, nameQuietUntil = 0;
+  var nameLocal = false, nameShown = false, nameDismissedSeq = -1;
 
   function nameModalWanted() {
-    // 방금 닫았으면 잠깐은 다시 띄우지 않는다 (닫기 전에 보낸 상태가 늦게 도착할 수 있다)
-    return !adminOpen && !!state && (nameLocal || (performance.now() > nameQuietUntil && !!(state.name && state.name.prompt)));
+    // 닫은 요청(같은 번호)이 늦게 다시 와도 무시하고, START 를 새로 누르면(번호가 바뀌면) 다시 띄운다
+    var nm = state && state.name;
+    return !adminOpen && !!state && (nameLocal || (!!nm.prompt && nm.promptSeq !== nameDismissedSeq));
   }
 
   function renderNameModal() {
     var want = nameModalWanted();
-    if (want === nameShown) {
-      if (want) $('name-hint').textContent = nameHint();
-      return;
-    }
+    if (want === nameShown) return;
     nameShown = want;
     $('name-modal').hidden = !want;
     if (want) {
       releaseSimKeys();
       $('name-input').value = (state.name && state.name.next) || '';
-      $('name-hint').textContent = nameHint();
       setTimeout(function () { $('name-input').focus(); }, 0);
     } else if (document.activeElement === $('name-input')) {
       $('name-input').blur();
     }
-  }
-
-  function nameHint() {
-    return state.name && state.name.prompt
-      ? 'Enter: 바로 시작 · 비우고 Enter: 이름 없이 시작 · Esc: 취소'
-      : 'Enter: 저장 (START 를 누르면 시작) · Esc: 닫기';
   }
 
   function openNameModal() {
@@ -1155,7 +1270,7 @@
 
   function closeNameModal() {
     nameLocal = false;
-    nameQuietUntil = performance.now() + 400;
+    if (state && state.name) nameDismissedSeq = state.name.promptSeq;
     nameShown = false;
     $('name-modal').hidden = true;
     $('name-input').blur();
@@ -1171,10 +1286,14 @@
       closeNameModal();
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      if (state.name && state.name.prompt) api.cancelName();
-      closeNameModal();
+      cancelNameModal();
     }
   });
+
+  function cancelNameModal() {
+    if (state.name && state.name.prompt) api.cancelName();
+    closeNameModal();
+  }
 
   // ───────────────────────── 명예의 전당 축하 (이름 받기가 켜져 있을 때만) ─────────────────────────
   var celebratedId = null, fx = null;
@@ -1196,11 +1315,12 @@
     $('celebrate-text').textContent = text;
     $('celebrate').hidden = false;
     var c = $('fx');
+    c.width = Math.round(stageW); c.height = Math.round(stageH);
     c.hidden = false;
     var g = c.getContext('2d');
     fx = { parts: [], started: performance.now(), nextBurst: 0, raf: 0 };
     var burst = function () {
-      var cx = 160 + Math.random() * 1120, cy = 120 + Math.random() * 380;
+      var cx = 160 + Math.random() * (c.width - 320), cy = 120 + Math.random() * (c.height * 0.42);
       var col = FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)];
       var n = 70 + Math.floor(Math.random() * 40);
       for (var i = 0; i < n; i++) {
@@ -1241,6 +1361,76 @@
     $('celebrate').hidden = true;
   }
 
+  // ───────────────────────── 조작 안내 (관리자 화면에서 Control + /) ─────────────────────────
+  var guideOpen = false, guidePrev = null;
+
+  function isGuideKey(e) { // Control + / (Windows는 Ctrl + /)
+    return e.code === 'Slash' && e.ctrlKey && !e.shiftKey && !e.metaKey && !e.altKey;
+  }
+
+  function renderGuide() {
+    var C = isMac ? 'Control' : 'Ctrl';
+    // [그룹 이름, 부제, [[설명, 키 목록(배열 하나 = 함께 누름, '/' = 또는, '~' = 범위)], …], 메모]
+    var cols = [
+      [
+        ['관리자 화면', '', [['열기 · 닫기', [C, 'D']], ['닫기', ['Esc']], ['조작 안내 열기 · 닫기', [C, '/']]]],
+        ['기록', '1페이지', [['이름 · 점수 고친 뒤 저장', ['Enter']]]],
+        ['진단', '2페이지', [['지금 하는 동작 표시', ['0', '~', '4']]], '0 없음 · 1 쉼 · 2 약하게 · 3 중간 · 4 최대']
+      ],
+      [
+        ['화면', '', [['전체화면 전환', ['F11']]].concat(isMac ? [['전체화면 전환', [C, 'Cmd', 'F']]] : [], [['결과 → 대기 화면', [C, 'A']]])],
+        ['도전자 이름', '관중 화면', [['입력창 열기 · 닫기', [C, 'F']], ['이름 넣고 시작', ['Enter']], ['빈 칸으로 시작 (ㅇㅇㅇ)', ['Enter']], ['취소', ['Esc']]]]
+      ],
+      [
+        ['확인 창', '', [['고른 버튼 누르기', ['Enter']], ['취소', ['Esc']], ['버튼 옮기기', ['Tab']]]],
+        ['시뮬레이션', state && state.sim ? '켜짐' : '꺼짐', [['측정 시작', ['S']], ['힘주기 (누르고 있기)', ['A']]]]
+      ]
+    ];
+    var html = '';
+    cols.forEach(function (col) {
+      html += '<div class="guide-col">';
+      col.forEach(function (g) {
+        html += '<div class="guide-group"><div class="guide-gname">' + esc(g[0]) + (g[1] ? '<small>' + esc(g[1]) + '</small>' : '') + '</div>';
+        g[2].forEach(function (r) {
+          var keys = r[1].map(function (k, i) {
+            if (k === '/' || k === '~') return '<span>' + (k === '/' ? '또는' : '~') + '</span>';
+            var plus = i > 0 && r[1][i - 1] !== '/' && r[1][i - 1] !== '~' ? '<span>+</span>' : '';
+            return plus + '<span class="kc">' + esc(k) + '</span>';
+          }).join('');
+          html += '<div class="guide-row"><span class="guide-label">' + esc(r[0]) + '</span><span class="guide-keys">' + keys + '</span></div>';
+        });
+        if (g[3]) html += '<div class="guide-note">' + esc(g[3]) + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+    $('guide-cols').innerHTML = html;
+  }
+
+  function openGuide() {
+    if (guideOpen || !adminOpen) return;
+    guideOpen = true;
+    releaseSimKeys();
+    guidePrev = document.activeElement;
+    renderGuide();
+    $('guide-modal').hidden = false;
+    $('guide-modal').querySelector('.guide-box').focus(); // 입력칸에 포커스가 남아 글자가 들어가지 않게
+  }
+
+  function closeGuide() {
+    if (!guideOpen) return;
+    guideOpen = false;
+    $('guide-modal').hidden = true;
+    if (guidePrev && guidePrev.focus && document.contains(guidePrev) && adminOpen) guidePrev.focus();
+    guidePrev = null;
+  }
+
+  $('guide-modal').addEventListener('click', function (e) { if (e.target === this) closeGuide(); });
+  $('guide-modal').addEventListener('keydown', function (e) {
+    e.stopPropagation(); // 관리자 화면 Esc, 시뮬레이션 키로 새지 않게
+    if (e.key === 'Escape' || isGuideKey(e)) { e.preventDefault(); closeGuide(); }
+  });
+
   // ───────────────────────── 키보드 ─────────────────────────
   // 한글 입력 상태에서도 동작하도록 e.key 대신 e.code 사용
   var SIM_KEYS = { KeyA: 'a' };
@@ -1252,10 +1442,26 @@
   }
 
   window.addEventListener('keydown', function (e) {
+    // 확인 창이 떠 있으면 (포커스가 창 밖으로 나갔어도) Esc 는 취소만 하고 다른 단축키·시뮬레이션 키는 받지 않는다
+    if (askDone) {
+      if (e.key === 'Escape') { e.preventDefault(); askDone(false); }
+      return;
+    }
+    // 조작 안내가 떠 있으면 (포커스가 창 밖이어도) 닫는 키만 받는다
+    if (guideOpen) {
+      if (e.key === 'Escape' || isGuideKey(e)) { e.preventDefault(); closeGuide(); }
+      return;
+    }
+    // 조작 안내: Control + / (관리자 화면에서만)
+    if (isGuideKey(e)) {
+      e.preventDefault();
+      if (adminOpen && !e.repeat) openGuide();
+      return;
+    }
     // 전체화면 ↔ 창 모드 (관중 화면·관리자 화면 어디서나)
     if (e.key === 'F11' || (isMac && e.code === 'KeyF' && e.ctrlKey && e.metaKey)) {
       e.preventDefault();
-      if (!e.repeat) api.toggleFullscreen();
+      if (!e.repeat) toggleFullscreenSnap();
       return;
     }
     // 관리자 화면: Control + D (Windows는 Ctrl + D). macOS의 Cmd 는 Control 과 별개라 Control 키만 본다.
@@ -1264,13 +1470,22 @@
       if (adminOpen) closeAdmin(); else openAdmin();
       return;
     }
+    // 결과 화면 → 대기 화면: Control + A (Windows는 Ctrl + A). 입력칸에서는 원래 동작(전체 선택 등)을 둔다.
+    if (e.code === 'KeyA' && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) {
+      e.preventDefault();
+      if (!e.repeat) api.toIdle();
+      return;
+    }
     // 도전자 이름 입력: Control + F (Windows는 Ctrl + F). macOS 의 Control + Cmd + F 는 위에서 전체화면으로 처리했다.
     if (e.code === 'KeyF' && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       if (!adminOpen && !e.repeat) { if (nameShown) closeNameModal(); else openNameModal(); }
       return;
     }
-    if (nameShown) return; // 입력창이 떠 있으면 시뮬레이션 키는 받지 않는다
+    if (nameShown) { // 입력창이 떠 있으면 시뮬레이션 키는 받지 않는다 (입력칸 밖에 포커스가 있어도 Esc 는 닫기)
+      if (e.key === 'Escape') { e.preventDefault(); cancelNameModal(); }
+      return;
+    }
     if (adminOpen) {
       if (e.key === 'Escape') { e.preventDefault(); closeAdmin(); return; }
       // 진단 페이지: 숫자키 0~4 로 지금 하는 동작 표시 (녹화 CSV 와 그래프 아래 띠에 남는다)
