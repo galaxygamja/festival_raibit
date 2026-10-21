@@ -1172,11 +1172,12 @@
 
   // ───────────────────────── 도전자 이름 입력창 ─────────────────────────
   // Control+F 로 미리 넣거나(nameLocal), 이름 받기가 켜진 상태에서 START 가 눌리면(state.name.prompt) 뜬다
-  var nameLocal = false, nameShown = false, nameQuietUntil = 0;
+  var nameLocal = false, nameShown = false, nameDismissedSeq = -1;
 
   function nameModalWanted() {
-    // 방금 닫았으면 잠깐은 다시 띄우지 않는다 (닫기 전에 보낸 상태가 늦게 도착할 수 있다)
-    return !adminOpen && !!state && (nameLocal || (performance.now() > nameQuietUntil && !!(state.name && state.name.prompt)));
+    // 닫은 요청(같은 번호)이 늦게 다시 와도 무시하고, START 를 새로 누르면(번호가 바뀌면) 다시 띄운다
+    var nm = state && state.name;
+    return !adminOpen && !!state && (nameLocal || (!!nm.prompt && nm.promptSeq !== nameDismissedSeq));
   }
 
   function renderNameModal() {
@@ -1210,7 +1211,7 @@
 
   function closeNameModal() {
     nameLocal = false;
-    nameQuietUntil = performance.now() + 400;
+    if (state && state.name) nameDismissedSeq = state.name.promptSeq;
     nameShown = false;
     $('name-modal').hidden = true;
     $('name-input').blur();
@@ -1226,10 +1227,14 @@
       closeNameModal();
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      if (state.name && state.name.prompt) api.cancelName();
-      closeNameModal();
+      cancelNameModal();
     }
   });
+
+  function cancelNameModal() {
+    if (state.name && state.name.prompt) api.cancelName();
+    closeNameModal();
+  }
 
   // ───────────────────────── 명예의 전당 축하 (이름 받기가 켜져 있을 때만) ─────────────────────────
   var celebratedId = null, fx = null;
@@ -1326,7 +1331,10 @@
       if (!adminOpen && !e.repeat) { if (nameShown) closeNameModal(); else openNameModal(); }
       return;
     }
-    if (nameShown) return; // 입력창이 떠 있으면 시뮬레이션 키는 받지 않는다
+    if (nameShown) { // 입력창이 떠 있으면 시뮬레이션 키는 받지 않는다 (입력칸 밖에 포커스가 있어도 Esc 는 닫기)
+      if (e.key === 'Escape') { e.preventDefault(); cancelNameModal(); }
+      return;
+    }
     if (adminOpen) {
       if (e.key === 'Escape') { e.preventDefault(); closeAdmin(); return; }
       // 진단 페이지: 숫자키 0~4 로 지금 하는 동작 표시 (녹화 CSV 와 그래프 아래 띠에 남는다)

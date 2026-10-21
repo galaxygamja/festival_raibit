@@ -40,6 +40,8 @@ let recorder = null; // 관리자 2페이지 녹화 (userData/recordings)
 const startedAt = Date.now();
 // 도전자 이름: nextName = 다음 측정에 쓸 이름 (Control+F 로 입력), currentName = 지금 측정 중인 사람, namePrompt = START 가 눌렸는데 이름이 없어 입력창을 띄운 상태
 let nextName = null, currentName = null, namePrompt = false;
+// START 가 입력창을 요청할 때마다 1 씩 늘린다. 화면은 닫은 요청 번호를 기억해 늦게 온 옛 요청만 무시한다.
+let namePromptSeq = 0;
 
 // 최근 로그를 진단 화면에서 보이게 모아 둔다
 const logs = [];
@@ -81,7 +83,7 @@ function payload() {
   return {
     game: game.snapshot(t),
     result: lastResult,
-    name: { next: nextName, current: currentName, prompt: namePrompt },
+    name: { next: nextName, current: currentName, prompt: namePrompt, promptSeq: namePromptSeq },
     hall: hallTop,
     recordsRev, // 전체 기록은 크기가 커서 payload 에 싣지 않고, 관리자 화면이 records:get 으로 받아 간다
     recordsTotal: records.length,
@@ -123,6 +125,7 @@ function requestStart(fromAdmin) {
   if (game.phase === 'measuring' || autocal.running) return;
   if (!fromAdmin && settings.askName && !nextName) {
     namePrompt = true;
+    namePromptSeq++;
     push();
     return;
   }
