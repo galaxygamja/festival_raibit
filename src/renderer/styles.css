@@ -230,6 +230,23 @@ body.mac-titlebar #main { padding-top: 44px; }
 .ask-box.danger .ask-btn.ok { border-color: #FF4A1C; background: #FF4A1C; color: #1A0D0B; box-shadow: 0 0 22px rgba(255,74,28,0.4); }
 .ask-box.danger .ask-btn.ok:hover { background: #FF6A44; }
 .ask-btn:focus-visible { outline: 3px solid #FFD27A; outline-offset: 3px; }
+/* 조작 안내 */
+#guide-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 4, 3, 0.78); z-index: 25; font-family: 'Do Hyeon', sans-serif; color: #F3E6E1; }
+#guide-modal[hidden] { display: none; }
+.guide-box { box-sizing: border-box; width: 1240px; max-height: 820px; word-break: keep-all; padding: 34px 44px 38px; border-radius: 28px; background: #1C0F0D; border: 3px solid #FFB21E; box-shadow: 0 0 44px rgba(255,178,30,0.35), inset 0 1px 0 rgba(255,210,122,0.12); display: flex; flex-direction: column; gap: 26px; outline: none; animation: pop 0.18s ease-out; }
+.guide-head { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 18px; border-bottom: 2px solid #3A231E; }
+.guide-title { font-size: 46px; line-height: 1; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); }
+.guide-close { font-size: 20px; color: #8E7770; display: flex; align-items: center; gap: 10px; }
+.guide-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 40px; min-height: 0; overflow-y: auto; }
+.guide-col { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+.guide-group { display: flex; flex-direction: column; gap: 10px; }
+.guide-gname { display: flex; align-items: baseline; gap: 10px; font-size: 26px; color: #FFB21E; }
+.guide-gname small { font-size: 17px; color: #8E7770; }
+.guide-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 14px; min-height: 40px; }
+.guide-label { font-size: 21px; color: #C9B3AC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.guide-keys { display: flex; align-items: center; gap: 5px; flex-shrink: 0; font-size: 17px; color: #6E5A54; white-space: nowrap; }
+.kc { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 36px; height: 36px; padding: 0 10px; border-radius: 9px; border: 2px solid #4A2E28; border-bottom-width: 4px; background: #2A1714; color: #F3E6E1; font-size: 19px; line-height: 1; white-space: nowrap; }
+.guide-note { font-size: 17px; color: #8E7770; line-height: 1.35; }
 #fx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
 #celebrate { position: absolute; left: 0; right: 0; bottom: 70px; display: flex; justify-content: center; pointer-events: none; z-index: 11; font-family: 'Do Hyeon', sans-serif; }
 #celebrate[hidden] { display: none; }

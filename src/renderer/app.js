@@ -660,6 +660,7 @@
   $('shortcut').textContent = isMac ? 'Control + D' : 'Ctrl + D';
   $('fs-shortcut').textContent = isMac ? 'F11 / Control + Cmd + F' : 'F11';
   $('name-shortcut').textContent = isMac ? 'Control + F' : 'Ctrl + F';
+  $('guide-shortcut').textContent = isMac ? 'Control + ?' : 'Ctrl + ?';
 
   // macOS: 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
   if (isMac) {
@@ -686,6 +687,7 @@
 
   function closeAdmin() {
     setAdminOpen(false);
+    closeGuide();
     if (document.activeElement) document.activeElement.blur();
     $('admin').hidden = true;
     $('diag').hidden = true;
@@ -1350,6 +1352,76 @@
     $('celebrate').hidden = true;
   }
 
+  // ───────────────────────── 조작 안내 (관리자 화면에서 Control + ?) ─────────────────────────
+  var guideOpen = false, guidePrev = null;
+
+  function isGuideKey(e) { // Control + ? = Control + Shift + / (Windows는 Ctrl + ?)
+    return e.code === 'Slash' && e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey;
+  }
+
+  function renderGuide() {
+    var C = isMac ? 'Control' : 'Ctrl';
+    // [그룹 이름, 부제, [[설명, 키 목록(배열 하나 = 함께 누름, '/' = 또는, '~' = 범위)], …], 메모]
+    var cols = [
+      [
+        ['관리자 화면', '', [['열기 · 닫기', [C, 'D']], ['닫기', ['Esc']], ['조작 안내 열기 · 닫기', [C, '?']]]],
+        ['기록', '1페이지', [['이름 · 점수 고친 뒤 저장', ['Enter']]]],
+        ['진단', '2페이지', [['지금 하는 동작 표시', ['0', '~', '4']]], '0 없음 · 1 쉼 · 2 약하게 · 3 중간 · 4 최대']
+      ],
+      [
+        ['화면', '', [['전체화면 전환', ['F11']]].concat(isMac ? [['전체화면 전환', [C, 'Cmd', 'F']]] : [], [['결과 → 대기 화면', [C, 'A']]])],
+        ['도전자 이름', '관중 화면', [['입력창 열기 · 닫기', [C, 'F']], ['이름 넣고 시작', ['Enter']], ['빈 칸으로 시작 (ㅇㅇㅇ)', ['Enter']], ['취소', ['Esc']]]]
+      ],
+      [
+        ['확인 창', '', [['고른 버튼 누르기', ['Enter']], ['취소', ['Esc']], ['버튼 옮기기', ['Tab']]]],
+        ['시뮬레이션', state && state.sim ? '켜짐' : '꺼짐', [['측정 시작', ['S']], ['힘주기 (누르고 있기)', ['A']]]]
+      ]
+    ];
+    var html = '';
+    cols.forEach(function (col) {
+      html += '<div class="guide-col">';
+      col.forEach(function (g) {
+        html += '<div class="guide-group"><div class="guide-gname">' + esc(g[0]) + (g[1] ? '<small>' + esc(g[1]) + '</small>' : '') + '</div>';
+        g[2].forEach(function (r) {
+          var keys = r[1].map(function (k, i) {
+            if (k === '/' || k === '~') return '<span>' + (k === '/' ? '또는' : '~') + '</span>';
+            var plus = i > 0 && r[1][i - 1] !== '/' && r[1][i - 1] !== '~' ? '<span>+</span>' : '';
+            return plus + '<span class="kc">' + esc(k) + '</span>';
+          }).join('');
+          html += '<div class="guide-row"><span class="guide-label">' + esc(r[0]) + '</span><span class="guide-keys">' + keys + '</span></div>';
+        });
+        if (g[3]) html += '<div class="guide-note">' + esc(g[3]) + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+    $('guide-cols').innerHTML = html;
+  }
+
+  function openGuide() {
+    if (guideOpen || !adminOpen) return;
+    guideOpen = true;
+    releaseSimKeys();
+    guidePrev = document.activeElement;
+    renderGuide();
+    $('guide-modal').hidden = false;
+    $('guide-modal').querySelector('.guide-box').focus(); // 입력칸에 포커스가 남아 글자가 들어가지 않게
+  }
+
+  function closeGuide() {
+    if (!guideOpen) return;
+    guideOpen = false;
+    $('guide-modal').hidden = true;
+    if (guidePrev && guidePrev.focus && document.contains(guidePrev) && adminOpen) guidePrev.focus();
+    guidePrev = null;
+  }
+
+  $('guide-modal').addEventListener('click', function (e) { if (e.target === this) closeGuide(); });
+  $('guide-modal').addEventListener('keydown', function (e) {
+    e.stopPropagation(); // 관리자 화면 Esc, 시뮬레이션 키로 새지 않게
+    if (e.key === 'Escape' || isGuideKey(e)) { e.preventDefault(); closeGuide(); }
+  });
+
   // ───────────────────────── 키보드 ─────────────────────────
   // 한글 입력 상태에서도 동작하도록 e.key 대신 e.code 사용
   var SIM_KEYS = { KeyA: 'a' };
@@ -1364,6 +1436,17 @@
     // 확인 창이 떠 있으면 (포커스가 창 밖으로 나갔어도) Esc 는 취소만 하고 다른 단축키·시뮬레이션 키는 받지 않는다
     if (askDone) {
       if (e.key === 'Escape') { e.preventDefault(); askDone(false); }
+      return;
+    }
+    // 조작 안내가 떠 있으면 (포커스가 창 밖이어도) 닫는 키만 받는다
+    if (guideOpen) {
+      if (e.key === 'Escape' || isGuideKey(e)) { e.preventDefault(); closeGuide(); }
+      return;
+    }
+    // 조작 안내: Control + ? (관리자 화면에서만)
+    if (isGuideKey(e)) {
+      e.preventDefault();
+      if (adminOpen && !e.repeat) openGuide();
       return;
     }
     // 전체화면 ↔ 창 모드 (관중 화면·관리자 화면 어디서나)
