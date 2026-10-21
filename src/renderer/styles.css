@@ -74,11 +74,11 @@ body.mac-titlebar #main { padding-top: 44px; }
 }
 #main { gap: 40px; }
 #admin { gap: 32px; }
-/* 관중 화면. 세로로 긴 창에서는 --tall(0~1.5, app.js fit)에 따라 가운데 칸의 글자·숫자·여백이 함께 커진다 */
+/* 관중 화면. 세로로 긴 창에서는 --tall(0~1.5, app.js fit)에 따라 가운데 칸의 글자·숫자·여백이 함께 커지고, 가로로 넓은 창에서는 가운데 칸이 게이지 사이를 채운다 */
 #stage { --tall: 0; }
 .main-row { flex: 1; min-height: 0; display: flex; justify-content: space-between; gap: 54px; }
 .gauge { width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px; }
-.main-center { flex: 0 1 840px; min-width: 0; display: flex; flex-direction: column; justify-content: space-evenly; gap: calc(26px + 30px * var(--tall)); }
+.main-center { flex: 1 1 840px; min-width: 0; display: flex; flex-direction: column; justify-content: space-evenly; gap: calc(26px + 30px * var(--tall)); }
 .banner {
   position: relative;
   flex: calc(0.4 * var(--tall)) 0 auto; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center;
