@@ -360,6 +360,7 @@ function classifyProbe({ messages, frameCount })  // HWT 메시지가 있거나 
   - CLAUDE.md: "(v2)" 표시와 "Current status" 절 정리, v1 설명 삭제.
   - `design/`은 초기 스펙으로 그대로 둔다.
 - [ ] **11. 하드웨어 테스트**(현장, 사용자와 함께)
+  - 완료(2026-10-21, 사용자 확인): 행사 노트북에서 자동 보정 후 실제 점수 확인. 아래 나머지(macOS baud, START 버튼, Windows exe)는 아직.
   - SpikerBox 연결 → 관리자 화면의 HWT·채널·fps 확인 → 1장 표와 다르면 이 문서 고치기.
   - macOS에서 222222 baud가 열리는지(10장). 안 되면 230400으로 시도하는 코드 추가.
   - 영점 잡기 → 여러 사람이 힘껏 쥐어 보고 최고 점수가 9999에 닿지 않게 보정계수 기본값 결정.
