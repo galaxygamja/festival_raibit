@@ -2,7 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog, session } = require('electron');
 const { Game, scoreOf, pctOf, DEFAULT_SCORE, CURVE_PRESETS } = require('./game');
 const hall = require('./hall');
 const { Store, normalizeSettings } = require('./store');
@@ -401,7 +401,27 @@ function setupIpc() {
   ipcMain.handle('app:quit', () => app.quit());
 }
 
-app.whenReady().then(() => {
+// 개발 실행에서만: Ctrl+G 로 화면 요소에 메모를 남기는 레이어 (빌드에는 들어가지 않음)
+async function installMemo() {
+  try {
+    const root = path.join(__dirname, '..', '..');
+    const renderer = path.join(__dirname, '..', 'renderer');
+    const { installMemoLayer } = await import('./electron-memo/main.mjs');
+    await installMemoLayer({
+      app,
+      session: session.defaultSession,
+      ipcMain,
+      storeDir: path.join(root, '.electron-memos'),
+      isTrustedUrl: (url) => url.startsWith('file://') && decodeURIComponent(new URL(url).pathname).startsWith(renderer),
+      locale: 'ko',
+      repoRoot: root,
+    });
+  } catch (err) {
+    console.warn('[memo] 메모 레이어를 켜지 못했습니다', err);
+  }
+}
+
+app.whenReady().then(async () => {
   store = new Store(app.getPath('userData'));
   settings = store.loadSettings();
   recorder = new Recorder({ dir: path.join(store.dir, 'recordings') });
@@ -441,6 +461,7 @@ app.whenReady().then(() => {
 
   setupMenu();
   setupIpc();
+  if (!app.isPackaged) await installMemo();
   createWindow(FORCE_WINDOWED ? false : FORCE_FULLSCREEN ? true : settings.fullscreen);
   serial.start();
   if (START_SIM) sim.setEnabled(true);
