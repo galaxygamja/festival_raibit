@@ -80,14 +80,23 @@ body.mac-titlebar #main { padding-top: 44px; }
 .gauge { width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px; }
 .main-center { flex: 0 1 840px; min-width: 0; display: flex; flex-direction: column; justify-content: space-evenly; gap: calc(26px + 30px * var(--tall)); }
 .banner {
+  position: relative;
   flex: calc(0.4 * var(--tall)) 0 auto; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: calc(18px + 24px * var(--tall)) 40px calc(16px + 22px * var(--tall));
+  padding: calc(34px + 28px * var(--tall)) 40px calc(16px + 22px * var(--tall));
   gap: calc(6px + 16px * var(--tall));
   border-radius: calc(28px + 8px * var(--tall));
   background: #1C0F0D; border: 3px solid #FFB21E;
   box-shadow: 0 0 calc(30px + 20px * var(--tall)) #FFB21E55, inset 0 0 calc(30px + 20px * var(--tall)) #FFB21E22;
 }
-.banner-label { font-size: calc(26px + 6px * var(--tall)); letter-spacing: calc(0.3em - 0.06em * var(--tall)); color: #C9B3AC; white-space: nowrap; }
+/* 위 줄 안내는 배너 윗테두리에 걸친 탭이라 흐름 밖에 있다: 생기거나 사라져도 점수 위치가 그대로다 */
+.banner-label {
+  position: absolute; top: 0; left: 50%; transform: translate(-50%, calc(-50% - 1.5px));
+  padding: calc(4px + 3px * var(--tall)) calc(22px + 8px * var(--tall)) calc(4px + 3px * var(--tall)) calc(22px + 8px * var(--tall) + 0.3em - 0.06em * var(--tall));
+  border: 2px solid #FFB21E; border-radius: 999px; background: #1C0F0D;
+  box-shadow: 0 0 14px #FFB21E40;
+  font-size: calc(24px + 6px * var(--tall)); letter-spacing: calc(0.3em - 0.06em * var(--tall)); color: #E9DAD5; white-space: nowrap;
+}
+.banner-label:empty { display: none; }
 .score-zoom { zoom: min(calc(1 + 1.15 * var(--tall)), 2.45); }
 .bb { height: calc(78px + 52px * var(--tall)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(8px + 8px * var(--tall)); white-space: nowrap; }
 .bb-progress { font-size: calc(30px + 14px * var(--tall)); color: #E9DAD5; }
