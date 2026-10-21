@@ -29,6 +29,10 @@ a:hover { color: #FFD27A; }
   transform-origin: 0 0;
 }
 
+/* 제목 표시줄 대신 창을 끌어 옮기는 맨 위 띠 (전체화면에서는 숨김) */
+#drag-bar { position: fixed; left: 0; right: 0; top: 0; height: 20px; z-index: 100; -webkit-app-region: drag; }
+body.fullscreen #drag-bar { display: none; }
+
 .screen {
   position: absolute;
   inset: 0;

@@ -201,6 +201,9 @@ function createWindow(full) {
     kiosk: full && !IS_MAC,
     fullscreen: full && !IS_MAC,
     autoHideMenuBar: true,
+    // 제목 표시줄 없이 화면을 창 끝까지 쓴다 (macOS 신호등 버튼·Windows 창 버튼은 화면 위에 겹쳐 남김)
+    titleBarStyle: 'hidden',
+    ...(IS_MAC ? {} : { titleBarOverlay: { color: '#140A09', symbolColor: '#C9B3AC', height: 24 } }),
     show: false,
     title: 'raibitScoreboard',
     webPreferences: {

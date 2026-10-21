@@ -403,6 +403,7 @@
 
   function render() {
     if (!state) return;
+    document.body.classList.toggle('fullscreen', !!state.fullscreen);
     renderMain();
     if (adminOpen) { if (adminPage === 2) renderDiag(); else if (adminPage === 3) renderSettings(); else renderAdmin(); }
     renderNameModal();
