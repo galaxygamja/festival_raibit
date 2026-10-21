@@ -233,7 +233,7 @@ body.mac-titlebar #main { padding-top: 44px; }
 /* 조작 안내 */
 #guide-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 4, 3, 0.78); z-index: 25; font-family: 'Do Hyeon', sans-serif; color: #F3E6E1; }
 #guide-modal[hidden] { display: none; }
-.guide-box { box-sizing: border-box; width: 1240px; max-height: 820px; word-break: keep-all; padding: 34px 44px 38px; border-radius: 28px; background: #1C0F0D; border: 3px solid #FFB21E; box-shadow: 0 0 44px rgba(255,178,30,0.35), inset 0 1px 0 rgba(255,210,122,0.12); display: flex; flex-direction: column; gap: 26px; outline: none; animation: pop 0.18s ease-out; }
+.guide-box { box-sizing: border-box; width: 1240px; max-height: 820px; word-break: keep-all; padding: 34px 44px 38px; border-radius: 28px; background: #1C0F0D; border: 3px solid #FFB21E; box-shadow: 0 0 44px rgba(255,178,30,0.35), inset 0 1px 0 rgba(255,210,122,0.12); display: flex; flex-direction: column; gap: 26px; outline: none; }
 .guide-head { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 18px; border-bottom: 2px solid #3A231E; }
 .guide-title { font-size: 46px; line-height: 1; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); }
 .guide-close { font-size: 20px; color: #8E7770; display: flex; align-items: center; gap: 10px; }
