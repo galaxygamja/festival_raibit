@@ -848,9 +848,6 @@
   });
   $('btn-reconnect').addEventListener('click', function () { api.reconnect(); });
   $('sim-toggle').addEventListener('change', function (e) { api.setSim(e.target.checked); });
-  $('btn-quit').addEventListener('click', function () {
-    askConfirm({ title: '앱을 종료할까요?', ok: '종료', danger: true }).then(function (yes) { if (yes) api.quit(); });
-  });
   $('rows').addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.isComposing) saveRecords();
   });
@@ -1063,7 +1060,6 @@
     drawTable(livePct, maxPct);
     $('t-live').textContent = '지금 힘 = 기준의 ' + fmt(livePct, 0) + '% → ' + scoreFromTable(livePct, sc.points) + '점' +
       (maxS ? ' · 마지막 측정 최고 ' + fmt(maxPct, 0) + '% → ' + scoreFromTable(maxPct, sc.points) + '점' : '');
-    $('s-live').textContent = emg.zeroing ? '영점 재는 중… 힘을 빼세요' : '지금 거른 RMS ' + fmt(emg.rms, 1) + ' · 세기 ' + fmt(emg.strength, 1) + ' · 거르기 전 ' + fmt(emg.rmsRaw, 1);
     if (lastZeroing && !emg.zeroing) $('s-rest').value = Math.round((emg.restRms || 0) * 100) / 100; // 영점 잡기가 끝나면 입력칸에 넣는다
     lastZeroing = !!emg.zeroing;
     var busy = g.phase === 'measuring';
