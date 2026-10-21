@@ -224,7 +224,7 @@
           </div>
         </div>
 
-        <canvas id="t-graph" width="1640" height="480" style="width: 820px; height: 240px; border-radius: 12px; background: #120807; flex: none; cursor: crosshair; touch-action: none"></canvas>
+        <canvas id="t-graph" width="1640" height="480" style="width: 100%; min-height: 240px; flex: 1 1 0; border-radius: 12px; background: #120807; cursor: crosshair; touch-action: none"></canvas>
         <div id="sc-examples" style="display: flex; gap: 8px; flex: none"></div>
 
         <div style="display: flex; gap: 10px; align-items: center; flex: none">
@@ -242,7 +242,6 @@
       <div style="display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto">
         <div class="card" style="flex: none; border-color: #FFB21E">
           <h2>자동 보정</h2>
-          <div class="hint" style="font-size: 17px; color: #B8A29B">이 노트북·이 장소의 잡음을 재서 채널·전원·영점·여유·고역을 고르고, 최대 힘으로 기준 힘도 잡습니다. 결과를 보고 적용할지 정합니다.</div>
           <div style="display: flex; gap: 10px">
             <button type="button" id="btn-cal-full" class="btn amber" style="flex: 1; height: 48px; font-size: 22px">자동 보정 (12초)</button>
             <button type="button" id="btn-cal-noise" class="btn" style="height: 48px" title="쉬는 동안만 재서 전원·영점·여유만 다시 맞춥니다">잡음만 (5초)</button>
@@ -250,7 +249,7 @@
           <div id="cal-last" class="hint"></div>
         </div>
         <div class="card" style="flex: none">
-          <h2>신호 <span class="hint" style="font-size: 17px">· 직접 조정 (보통은 자동 보정이 맞춤)</span></h2>
+          <h2>직접 보정</h2>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
             <label class="field" title="센서가 꽂힌 SpikerBox 채널"><span>채널</span><select id="s-channel"><option value="1">1</option><option value="2">2</option></select></label>
             <label class="field" title="한국·미국 60 Hz, 유럽·일본 동부 등 50 Hz"><span>전원</span><select id="s-mains"><option value="60">60 Hz</option><option value="50">50 Hz</option></select></label>

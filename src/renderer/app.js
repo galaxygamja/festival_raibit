@@ -526,13 +526,14 @@
       ['표시한 시간', counts || null],
       ['파일', r.on ? r.file : r.lastFile ? r.lastFile + ' (저장됨)' : null, !r.on && r.lastFile ? GOOD : null],
       ['오류', r.error, r.error ? BAD : null],
-    ]) + '<div style="font-size: 13px; color: #8E7770; overflow-wrap: anywhere">' + esc(r.dir || '') + '</div>';
+    ]);
   }
 
   function renderDiag() {
     var d = state.diag;
     $('diag-version').textContent = state.version ? 'v' + state.version : '';
     if (!d) return;
+    var set = state.settings || {}, nPts = ((set.score || {}).points || []).length;
     var sig = d.signal, ser = d.serial, ps = state.ports || {}, sb = ps.spikerbox || {}, st = ps.start || {};
     var emg = state.emg || {};
     drawScope(sig);
@@ -947,8 +948,9 @@
     $('sc-examples').hidden = open;
     $('btn-t-rows').textContent = open ? '세부 점 닫기 ▴' : '세부 점 고치기 ▾';
     var c = $('t-graph');
-    c.height = open ? 300 : 480;
-    c.style.height = (open ? 150 : 240) + 'px';
+    c.style.flex = open ? 'none' : '1 1 0';
+    c.style.minHeight = open ? '150px' : '240px';
+    c.style.height = open ? '150px' : 'auto';
     if (open) renderTableRows();
   }
 
@@ -958,7 +960,12 @@
   function gy(v, H) { return H - G.B - (v / MAX_SCORE) * (H - G.B - G.T); }
 
   function drawTable(livePct, maxPct) {
-    var c = $('t-graph'), g = c.getContext('2d'), W = c.width, H = c.height, t = sc.points;
+    var c = $('t-graph');
+    // 카드 높이에 맞춰 늘어나는 그래프: 화면 크기의 2배 해상도로 맞춘다
+    var bw = Math.max(1, Math.round(c.clientWidth * 2)), bh = Math.max(1, Math.round(c.clientHeight * 2));
+    if (c.width !== bw) c.width = bw;
+    if (c.height !== bh) c.height = bh;
+    var g = c.getContext('2d'), W = c.width, H = c.height, t = sc.points;
     g.clearRect(0, 0, W, H);
     G.xmax = Math.max(120, t.length ? t[t.length - 1][0] * 1.1 : 120, (livePct || 0) * 1.05, (maxPct || 0) * 1.05);
     var x = function (v) { return gx(v, W); }, y = function (v) { return gy(v, H); };
