@@ -50,8 +50,10 @@
       <div style="width: 480px; flex: none; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto">
 
         <div style="box-sizing: border-box; padding: 14px 22px; border-radius: 24px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 8px">
-          <h2 style="margin: 0; font-size: 28px; font-weight: 400">경기 제어</h2>
-          <div style="font-size: 22px; color: #C9B3AC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">현재 상태: <span id="state-text"></span></div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+            <h2 style="margin: 0; font-size: 28px; font-weight: 400">경기 제어</h2>
+            <span id="state-text" style="font-size: 20px; white-space: nowrap"></span>
+          </div>
           <button type="button" id="btn-start" title="START 버튼과 같습니다" style="height: 56px; flex: none; border-radius: 16px; border: 0; background: #FF4A1C; color: #1A0D0B; font-family: inherit; font-size: 30px; cursor: pointer; box-shadow: 0 0 26px rgba(255,74,28,0.5)">측정 시작</button>
           <button type="button" id="btn-stop" title="중지하면 기록이 남지 않습니다" style="height: 42px; flex: none; border-radius: 16px; border: 2px solid #FF8A7A; background: transparent; color: #FF8A7A; font-family: inherit; font-size: 24px; cursor: pointer">측정 중지 · 기록하지 않음</button>
           <div style="display: flex; align-items: center; gap: 12px">

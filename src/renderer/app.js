@@ -231,10 +231,9 @@
   var MEDAL = ['#FFC83D', '#D3DAE2', '#D88A4E'];
   var renderedHallKey = '';
 
+  // 경기 제어 카드 우상단 상태: 측정 중 / 대기 중 (결과 화면도 대기 중)
   function stateLabel(g) {
-    if (g.phase === 'measuring') return ['측정 중', AMBER];
-    if (g.phase === 'result') return ['기록 ' + g.p1.score + '점 · 다음 도전 대기', AMBER];
-    return ['대기 중 · START 대기', '#C9B3AC'];
+    return g.phase === 'measuring' ? ['측정 중', '#7BE08A'] : ['대기 중', '#8E7770'];
   }
 
   // 전체 기록은 payload 에 없고, recordsRev 가 바뀔 때마다 records:get 으로 받아 온다 (점수 내림차순)
@@ -382,6 +381,7 @@
     var lbl = stateLabel(g);
     $('state-text').textContent = lbl[0];
     $('state-text').style.color = lbl[1];
+    $('state-text').style.textShadow = g.phase === 'measuring' ? '0 0 10px rgba(123,224,138,0.55)' : 'none';
     var busy = g.phase === 'measuring';
     $('btn-start').disabled = busy;
     $('btn-stop').disabled = !busy;
