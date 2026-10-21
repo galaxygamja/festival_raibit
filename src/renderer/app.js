@@ -1232,26 +1232,16 @@
 
   function renderNameModal() {
     var want = nameModalWanted();
-    if (want === nameShown) {
-      if (want) $('name-hint').textContent = nameHint();
-      return;
-    }
+    if (want === nameShown) return;
     nameShown = want;
     $('name-modal').hidden = !want;
     if (want) {
       releaseSimKeys();
       $('name-input').value = (state.name && state.name.next) || '';
-      $('name-hint').textContent = nameHint();
       setTimeout(function () { $('name-input').focus(); }, 0);
     } else if (document.activeElement === $('name-input')) {
       $('name-input').blur();
     }
-  }
-
-  function nameHint() {
-    return state.name && state.name.prompt
-      ? 'Enter: 바로 시작 · 비우고 Enter: 이름 없이 시작 · Esc: 취소'
-      : 'Enter: 저장 (START 를 누르면 시작) · Esc: 닫기';
   }
 
   function openNameModal() {
