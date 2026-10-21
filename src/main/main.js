@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { fileURLToPath } = require('url');
-const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog, session, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog, session, systemPreferences, screen } = require('electron');
 const { Game, scoreOf, pctOf, DEFAULT_SCORE, CURVE_PRESETS } = require('./game');
 const hall = require('./hall');
 const { Store, normalizeSettings } = require('./store');
@@ -176,13 +176,25 @@ function saveSettings() {
   }
 }
 
+let windowedBounds = null; // macOS: 전체화면에 들어가기 전 창 위치·크기
+
 /** 전체화면(kiosk) ↔ 창 모드. 고른 방식은 다음 실행 때도 유지된다. */
 // macOS 에서는 setKiosk 가 창 크기를 바꾸지 않는 경우가 있어(상태만 kiosk) 즉시 덮는 simple fullscreen 을 쓴다.
 function applyFullscreen(on) {
   if (IS_MAC) {
     if (!on && win.isFullScreen()) win.setFullScreen(false); // 초록 버튼으로 들어간 전체화면
     if (win.isKiosk()) win.setKiosk(false);
-    win.setSimpleFullScreen(!!on);
+    if (!!on === win.isSimpleFullScreen()) return;
+    // simple fullscreen 은 창 크기를 0.35초 동안 움직여 바꾼다. 들어가기 전에 화면 크기로, 나온 뒤에 원래 크기로
+    // 애니메이션 없이 먼저 맞춰 두면 메뉴 막대 높이만큼(0.1초)만 움직인다. 그동안 화면은 app.js 가 다시 맞추지 않는다.
+    if (on) {
+      windowedBounds = win.getBounds();
+      win.setBounds(screen.getDisplayMatching(windowedBounds).bounds, false);
+      win.setSimpleFullScreen(true);
+    } else {
+      win.setSimpleFullScreen(false);
+      if (windowedBounds) win.setBounds(windowedBounds, false);
+    }
   } else if (on) {
     win.setKiosk(true);
   } else {

@@ -25,10 +25,31 @@
   var stageW = DESIGN_W, stageH = DESIGN_H;
   // 관리자 화면에서는 창 맨 위 제목 표시줄(#titlebar, 창 px) 아래 영역에 무대를 맞춘다
   var TITLEBAR_H = 40;
+  // macOS 전체화면 전환은 창이 메뉴 막대 높이만큼 0.1초 움직인다. 그 중간 크기에는 맞추지 않는다:
+  // 들어갈 때는 바로 화면 전체 크기에 맞추고, 나올 때는 창이 줄어든 순간 한 번에 맞춘다.
+  var fsTransition = null; // 'enter' | 'exit' (전환 중일 때만)
+  function toggleFullscreenSnap() {
+    if (isMac) {
+      fsTransition = state && state.fullscreen ? 'exit' : 'enter';
+      if (fsTransition === 'enter') layout(screen.width, screen.height);
+      setTimeout(function () { fsTransition = null; fit(); }, 300);
+    }
+    api.toggleFullscreen();
+  }
+
   function fit() {
+    if (fsTransition === 'enter') return;
+    if (fsTransition === 'exit') {
+      if (window.innerWidth >= screen.width) return; // 아직 화면 전체 크기
+      fsTransition = null;
+    }
+    layout(window.innerWidth, window.innerHeight);
+  }
+
+  function layout(winW, winH) {
     var stage = $('stage');
     var top = document.body.classList.contains('app-titlebar') && document.body.classList.contains('admin-open') ? TITLEBAR_H : 0;
-    var w = window.innerWidth, h = window.innerHeight - top;
+    var w = winW, h = winH - top;
     var s = Math.min(w / DESIGN_W, h / DESIGN_H);
     stageH = h / s;
     stageW = Math.min(w / s, stageH * MAX_RATIO);
@@ -796,7 +817,7 @@
     if (b) { api.recLabel(b.dataset.label); b.blur(); }
   });
   $('btn-reconnect2').addEventListener('click', function () { api.reconnect(); });
-  $('btn-fullscreen').addEventListener('click', function () { api.toggleFullscreen(); });
+  $('btn-fullscreen').addEventListener('click', toggleFullscreenSnap);
   $('btn-start').addEventListener('click', function () { api.start(); });
   $('main').addEventListener('click', function (e) { if (e.target.closest('.bb-idle')) api.press(); });
   $('btn-stop').addEventListener('click', function () { api.stop(); });
@@ -1444,7 +1465,7 @@
     // 전체화면 ↔ 창 모드 (관중 화면·관리자 화면 어디서나)
     if (e.key === 'F11' || (isMac && e.code === 'KeyF' && e.ctrlKey && e.metaKey)) {
       e.preventDefault();
-      if (!e.repeat) api.toggleFullscreen();
+      if (!e.repeat) toggleFullscreenSnap();
       return;
     }
     // 관리자 화면: Control + D (Windows는 Ctrl + D). macOS의 Cmd 는 Control 과 별개라 Control 키만 본다.
