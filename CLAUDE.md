@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current status: v2.1.10
+## Current status: v2.1.11
 
 The v1→v2 migration (2-player Arduino contest → 1-player record mode fed by a SpikerBox) is code-complete and documented in `PLAN.md` (Phases 1–4 and checklist steps 1–10 done). **Step 11, the on-site hardware test, is partly done**: real SpikerBox/EMG scoring after 자동 보정 on the event laptop was confirmed by the user (2026-10-21). On the Windows laptop (2026-10-21) the Arduino Uno (COM7) was flashed with `arduino/start_button` via `arduino-cli` (`arduino-cli upload -p COM7 --fqbn arduino:avr:uno arduino/start_button`) and `SerialManager` classified it as the START port from its `ALIVE` lines; the user then confirmed the physical START button starting a measurement with SpikerBox force rising (2026-10-21, Desktop exe 2.1.10). Still open: macOS 222222 baud, Windows exe on site. The Windows build fails on this laptop with a winCodeSign symlink-privilege error unless run with `npx electron-builder --win portable nsis --x64 -c.win.signAndEditExecutable=false` (no rcedit, so no exe metadata edit). Update PLAN.md first if that testing changes a decision.
 
@@ -42,7 +42,7 @@ There is no lint step and no way to run a single test. `test/game.test.js` is on
 
 ## Architecture
 
-Electron app, two processes, no bundler. UI is fixed at 1440×900 design pixels and scaled to the window by `fit()` in `src/renderer/app.js`.
+Electron app, two processes, no bundler. UI is designed at 1440×900 design pixels; `fit()` in `src/renderer/app.js` scales it uniformly (1440×900 is the minimum) and grows `#stage` in design pixels along the spare axis so the window is filled (2.1.11; beyond a 2.4:1 width ratio the sides letterbox). On the main screen the gauges hug the edges and the center column keeps its 840 px design width.
 
 - **Main process** (`src/main/`) owns all state and timing. `main.js` wires everything. It ticks the game every 50 ms and pushes a single `payload` (`game, hall, ports, settings, sim, platform, fullscreen, ...`) to the renderer only when it changed. The renderer holds no authoritative state.
 - `serial.js` opens every USB serial port, rescans every 2 s, and skips non-USB ports (Bluetooth etc.). It never routes by port name.

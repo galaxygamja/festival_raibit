@@ -18,12 +18,20 @@
     });
   }
 
-  // ───────────────────────── 화면 비율 유지 확대·축소 ─────────────────────────
+  // ───────────────────────── 창 크기에 맞춰 확대·축소 ─────────────────────────
+  // 1440×900 을 최소 크기로 비율을 유지해 확대하고, 남는 방향으로 무대(디자인 px)를 늘려 창을 채운다.
+  // 가로가 세로의 2.4배를 넘으면 그 이상은 늘리지 않고 좌우를 비운다.
+  var DESIGN_W = 1440, DESIGN_H = 900, MAX_RATIO = 2.4;
+  var stageW = DESIGN_W, stageH = DESIGN_H;
   function fit() {
     var stage = $('stage');
-    var s = Math.min(window.innerWidth / 1440, window.innerHeight / 900);
-    var x = (window.innerWidth - 1440 * s) / 2, y = (window.innerHeight - 900 * s) / 2;
-    stage.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
+    var w = window.innerWidth, h = window.innerHeight;
+    var s = Math.min(w / DESIGN_W, h / DESIGN_H);
+    stageH = h / s;
+    stageW = Math.min(w / s, stageH * MAX_RATIO);
+    stage.style.width = stageW + 'px';
+    stage.style.height = stageH + 'px';
+    stage.style.transform = 'translate(' + (w - stageW * s) / 2 + 'px,0) scale(' + s + ')';
   }
   window.addEventListener('resize', fit);
   fit();
@@ -141,15 +149,15 @@
       bannerBottom(phase, g, res) +
       '</div>';
 
-    var hall = '<div style="flex: 1; min-height: 0; box-sizing: border-box; padding: 20px 32px; border-radius: 24px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 10px; overflow: hidden">' +
+    var hall = '<div style="flex: 0 1 auto; min-height: 0; box-sizing: border-box; padding: 20px 32px; border-radius: 24px; background: #1C0F0D; border: 1px solid #3A2420; display: flex; flex-direction: column; gap: 10px; overflow: hidden">' +
       '<h2 style="margin: 0 0 4px; font-size: 44px; font-weight: 400; text-align: center; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.55)">명예의 전당</h2>' +
       hallRows(state.hall) + '</div>';
 
     var gauge = function (id) { return '<div id="' + id + '" style="width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px"></div>'; };
     $('main').innerHTML =
-      '<div style="flex: 1; min-height: 0; display: flex; gap: 54px">' +
+      '<div style="flex: 1; min-height: 0; display: flex; justify-content: space-between; gap: 54px">' +
       gauge('gauge-l') +
-      '<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 26px">' + banner + hall + '</div>' +
+      '<div style="flex: 0 1 840px; min-width: 0; display: flex; flex-direction: column; justify-content: space-evenly; gap: 26px">' + banner + hall + '</div>' +
       gauge('gauge-r') +
       '</div>';
     drawn = { p1: -1 }; // 새로 만든 칸이라 다시 그리기
@@ -1196,11 +1204,12 @@
     $('celebrate-text').textContent = text;
     $('celebrate').hidden = false;
     var c = $('fx');
+    c.width = Math.round(stageW); c.height = Math.round(stageH);
     c.hidden = false;
     var g = c.getContext('2d');
     fx = { parts: [], started: performance.now(), nextBurst: 0, raf: 0 };
     var burst = function () {
-      var cx = 160 + Math.random() * 1120, cy = 120 + Math.random() * 380;
+      var cx = 160 + Math.random() * (c.width - 320), cy = 120 + Math.random() * (c.height * 0.42);
       var col = FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)];
       var n = 70 + Math.floor(Math.random() * 40);
       for (var i = 0; i < n; i++) {

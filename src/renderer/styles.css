@@ -19,7 +19,7 @@ html, body {
 a { color: #FFB21E; }
 a:hover { color: #FFD27A; }
 
-/* 1440×900 디자인을 비율 유지한 채 확대·축소 (app.js 에서 transform 지정) */
+/* 1440×900 디자인을 비율 유지한 채 확대·축소, 남는 방향은 늘려서 채움 (app.js fit 에서 크기·transform 지정) */
 #stage {
   position: absolute;
   left: 0;
@@ -138,7 +138,7 @@ a:hover { color: #FFD27A; }
 #name-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 4, 3, 0.72); z-index: 20; font-family: 'Do Hyeon', sans-serif; color: #F3E6E1; }
 #name-modal[hidden] { display: none; }
 #name-modal input { user-select: text; }
-#fx { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; pointer-events: none; z-index: 10; }
+#fx { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
 #celebrate { position: absolute; left: 0; right: 0; bottom: 70px; display: flex; justify-content: center; pointer-events: none; z-index: 11; font-family: 'Do Hyeon', sans-serif; }
 #celebrate[hidden] { display: none; }
 #celebrate div { padding: 14px 44px; border-radius: 26px; background: rgba(28, 15, 13, 0.92); border: 3px solid #FFB21E; font-size: 68px; color: #FFD27A; white-space: nowrap; text-shadow: 0 0 18px #FFB21E, 0 0 44px rgba(255,178,30,0.6); box-shadow: 0 0 40px rgba(255,178,30,0.5); animation: pop 0.5s ease-out; }
