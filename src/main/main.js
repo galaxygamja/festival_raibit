@@ -252,6 +252,8 @@ function setupMenu() {
 function setupIpc() {
   ipcMain.handle('state:get', () => payload());
   ipcMain.handle('game:start', () => requestStart(true));
+  // 관중 화면의 "START 버튼을 누르세요" 클릭 = START 버튼 (이름 받기 규칙도 같음)
+  ipcMain.handle('game:press', () => requestStart(false));
   ipcMain.handle('game:stop', () => {
     // 중지하면 이번 사람 이름은 다음 측정으로 돌려 둔다
     if (game.stop() && currentName && !nextName) nextName = currentName;

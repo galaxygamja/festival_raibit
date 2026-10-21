@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   getState: () => ipcRenderer.invoke('state:get'),
   onState: (cb) => ipcRenderer.on('state', (_e, s) => cb(s)),
   start: () => ipcRenderer.invoke('game:start'),
+  press: () => ipcRenderer.invoke('game:press'),
   stop: () => ipcRenderer.invoke('game:stop'),
   getRecords: () => ipcRenderer.invoke('records:get'),
   saveRecords: (edits) => ipcRenderer.invoke('records:save', edits),

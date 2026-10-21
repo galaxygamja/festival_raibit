@@ -754,6 +754,7 @@
   $('btn-reconnect2').addEventListener('click', function () { api.reconnect(); });
   $('btn-fullscreen').addEventListener('click', function () { api.toggleFullscreen(); });
   $('btn-start').addEventListener('click', function () { api.start(); });
+  $('main').addEventListener('click', function (e) { if (e.target.closest('.bb-idle')) api.press(); });
   $('btn-stop').addEventListener('click', function () { api.stop(); });
   $('btn-save-names').addEventListener('click', saveRecords);
   $('btn-toggle-records').addEventListener('click', function () {
