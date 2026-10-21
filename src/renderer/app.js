@@ -391,7 +391,7 @@
     renderPorts();
 
     $('sim-toggle').checked = state.sim;
-    $('btn-fullscreen').textContent = state.fullscreen ? '창 모드로 보기' : '전체화면으로 보기';
+    $('btn-fullscreen').textContent = state.fullscreen ? '창 모드' : '전체화면';
     if (state.saveError) {
       $('names-msg').textContent = state.saveError;
       $('names-msg').style.color = '#FF8A7A';
