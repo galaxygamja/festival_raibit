@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   // 점수: 기준 힘 + 기준 대비 % 점수표. 관리자 3페이지에서 고친다 (game.js DEFAULT_SCORE 설명 참고)
   score: defaultScore(),
   askName: true, // START 전에 도전자 이름을 받는다 (이름 없이 Enter 면 ㅇㅇㅇ)
+  sound: { on: true, volume: 0.7 }, // 효과음 (renderer/sound.js)
   // SpikerBox 채널(1|2), 휴식 RMS(영점, 거른 신호 기준), 영점 위 여유, 전원 주파수, 노치 사용, 고역 통과 Hz (0 = 끄기)
   emg: { channel: 1, restRms: 0, filtered: true, margin: 1.5, mainsHz: 60, notch: true, highpassHz: 80 },
   portRoles: {}, // { [path]: 'spikerbox' | 'start' }, 없는 path는 자동 판별
@@ -79,6 +80,7 @@ function normalizeSettings(raw) {
   // v1 설정은 {p1, p2} 객체였다 → p1 값을 가져온다
   const cal = s.calibration && typeof s.calibration === 'object' ? s.calibration.p1 : s.calibration;
   const emg = s.emg && typeof s.emg === 'object' ? s.emg : {};
+  const sound = s.sound && typeof s.sound === 'object' ? s.sound : {};
   const portRoles = {};
   if (s.portRoles && typeof s.portRoles === 'object') {
     Object.keys(s.portRoles).forEach((k) => {
@@ -91,6 +93,10 @@ function normalizeSettings(raw) {
     // 2.1.9~ score, 2.1.8 은 [세기, 점수] 표, 2.1.7 은 보정계수·곡선
     score: cleanScore(s.score) || scoreFromLegacyTable(cleanScoreTable(s.scoreTable) || tableFromCalibration(old ? null : cal, s.scoreCurve)),
     askName: typeof s.askName === 'boolean' ? s.askName : DEFAULT_SETTINGS.askName,
+    sound: {
+      on: typeof sound.on === 'boolean' ? sound.on : DEFAULT_SETTINGS.sound.on,
+      volume: clampNum(sound.volume, 0, 1, DEFAULT_SETTINGS.sound.volume),
+    },
     emg: {
       channel: Number(emg.channel) === 2 ? 2 : 1,
       restRms: old ? 0 : clampNum(emg.restRms, 0, 100000, 0),

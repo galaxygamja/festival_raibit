@@ -109,6 +109,7 @@
       }
       return '<div style="' + h + '"><div>' + inner + '</div></div>';
     }
+    if (phase === 'countdown') return '<div style="' + h + '"><div style="font-size: 46px; color: #E9DAD5">곧 측정을 시작합니다</div></div>';
     return '<div style="' + h + '"><div style="font-size: 46px; color: #E9DAD5">START 버튼을 누르세요</div></div>';
   }
 
@@ -130,6 +131,7 @@
     var resultName = phase === 'result' && state.result ? state.result.name : null;
     var labels = {
       idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '다음 경기 대기',
+      countdown: who(nm.current) + '준비하세요',
       measuring: who(nm.current) + '5초 동안 힘껏 쥐세요',
       result: who(resultName) + (res.rank ? '최종 기록 · 명예의 전당 ' + res.rank + '위!' : '최종 기록'),
     };
@@ -185,21 +187,115 @@
     lastFrame = t;
     if (state) {
       var a = 1 - Math.exp(-dt / SMOOTH_MS);
+      var before = shown.p1;
       ['p1'].forEach(function (k) {
         var target = targetOf(k);
         shown[k] = Math.abs(target - shown[k]) < 1 ? target : shown[k] + (target - shown[k]) * a;
       });
       drawPlayers();
+      // 측정 중 숫자가 오르는 속도만큼 화면이 떨린다
+      if (state.game.phase === 'measuring' && shown.p1 > before) bump(Math.min(7, (shown.p1 - before) / dt * 1.2));
+      applyShake(t, dt);
+      drawCountdown(t);
+      // 현재 힘 소리는 화면 숫자와 같은 부드러운 값을 따라간다 (점수 상한 = 1)
+      if (state.game.phase === 'measuring') {
+        var top = (state.settings.score && state.settings.score.top) || 7000;
+        Sound.power(Math.min(1, shown.p1 / top));
+      }
     }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+
+  // ───────────────────────── 화면 떨림 ─────────────────────────
+  // #main 을 무작위로 조금씩 옮긴다. 세기(px)는 금방 줄어들고, hold 동안은 그 세기를 유지한다.
+  var shake = 0, shakeOn = false, holdAmp = 0, holdUntil = 0;
+
+  function bump(px) { shake = Math.max(shake, px); }
+  function shakeFor(px, ms) { holdAmp = px; holdUntil = performance.now() + ms; }
+
+  function applyShake(t, dt) {
+    shake *= Math.exp(-dt / 120);
+    if (t < holdUntil) shake = Math.max(shake, holdAmp);
+    var el = $('main');
+    if (shake < 0.2) {
+      if (shakeOn) { el.style.transform = ''; shakeOn = false; }
+      return;
+    }
+    shakeOn = true;
+    el.style.transform = 'translate(' + ((Math.random() * 2 - 1) * shake).toFixed(1) + 'px,' + ((Math.random() * 2 - 1) * shake).toFixed(1) + 'px)';
+  }
+
+  // ───────────────────────── 3·2·1 카운트다운 ─────────────────────────
+  // 삐 소리와 같은 시계(카운트다운 상태를 받은 순간)로 0.715초마다 숫자를 바꾼다. 숫자는 5×7 픽셀 글꼴
+  var COUNT_STEP_MS = 715;
+  var PIXEL_DIGITS = {
+    1: ['..#..', '.##..', '..#..', '..#..', '..#..', '..#..', '.###.'],
+    2: ['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####'],
+    3: ['####.', '....#', '....#', '.###.', '....#', '....#', '####.'],
+  };
+
+  function pixelDigit(n) {
+    return PIXEL_DIGITS[n].map(function (row) {
+      return row.split('').map(function (c) { return '<i' + (c === '#' ? ' class="on"' : '') + '></i>'; }).join('');
+    }).join('');
+  }
+  var countdownAt = 0, countShown = 0;
+
+  function drawCountdown(t) {
+    var n = state.game.phase === 'countdown' ? Math.max(1, 3 - Math.floor((t - countdownAt) / COUNT_STEP_MS)) : 0;
+    if (n === countShown) return;
+    countShown = n;
+    $('countdown').hidden = !n;
+    if (!n) return;
+    var el = $('countdown-num');
+    el.innerHTML = pixelDigit(n);
+    el.style.animation = 'none';
+    void el.offsetWidth; // 숫자마다 튀어나오는 애니메이션을 다시 시작
+    el.style.animation = '';
+  }
+
+  // ───────────────────────── 효과음 ─────────────────────────
+  // 상태가 바뀌는 순간에만 울린다. 첫 상태는 기준으로만 쓴다.
+  var soundPhase = null, soundMark = 0, soundKey = '';
+
+  function soundCues() {
+    var key = JSON.stringify(state.settings.sound || {});
+    if (key !== soundKey) { soundKey = key; Sound.configure(state.settings.sound); }
+    var g = state.game, ph = g.phase;
+    if (soundPhase !== null && ph !== soundPhase) {
+      if (ph === 'countdown') {
+        countdownAt = performance.now();
+        Sound.play('count');
+      } else if (ph === 'measuring') {
+        soundMark = 0;
+        Sound.play('go');
+      } else if (soundPhase === 'measuring') {
+        Sound.power(null);
+        if (ph === 'result') {
+          var top5 = g.p1.score > 0 && state.result && state.result.rank;
+          Sound.play(top5 ? 'result' : g.p1.score > 0 ? 'miss' : 'zero');
+          if (!top5) shakeFor(4, 450); // 명예의 전당에 못 들면 짧게 흔들림
+        }
+      }
+    }
+    if (ph === 'measuring') {
+      var mark = Math.floor(g.p1.score / 1000); // 최고가 1000점을 넘을 때마다
+      if (mark > soundMark) { soundMark = mark; Sound.play('peak'); bump(6); }
+    }
+    soundPhase = ph;
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('button')) Sound.play('click');
+  }, true);
 
   // ───────────────────────── 관리자 화면 (Admin.dc.html renderVals) ─────────────────────────
   var MEDAL = ['#FFC83D', '#D3DAE2', '#D88A4E'];
   var renderedHallKey = '';
 
   function stateLabel(g) {
+    if (g.phase === 'countdown') return ['카운트다운', AMBER];
     if (g.phase === 'measuring') return ['측정 중', AMBER];
     if (g.phase === 'result') return ['기록 ' + g.p1.score + '점 · 다음 도전 대기', AMBER];
     return ['대기 중 · START 대기', '#C9B3AC'];
@@ -350,7 +446,7 @@
     var lbl = stateLabel(g);
     $('state-text').textContent = lbl[0];
     $('state-text').style.color = lbl[1];
-    var busy = g.phase === 'measuring';
+    var busy = g.phase === 'measuring' || g.phase === 'countdown';
     $('btn-start').disabled = busy;
     $('btn-stop').disabled = !busy;
     $('btn-reset-records').disabled = busy;
@@ -370,6 +466,7 @@
 
   function render() {
     if (!state) return;
+    soundCues();
     renderMain();
     if (adminOpen) { if (adminPage === 2) renderDiag(); else if (adminPage === 3) renderSettings(); else renderAdmin(); }
     renderNameModal();
@@ -783,12 +880,33 @@
     var set = state.settings, s0 = set.score || state.scoreDefault;
     fillSignal();
     $('s-askname').checked = !!set.askName;
+    fillSound();
     sc = { ref: s0.ref, top: s0.top, curve: s0.curve, points: copyPoints(s0.points) };
     $('sc-ref').value = sc.ref;
     $('sc-top').value = sc.top;
     renderScoreEditor();
     settingsMsg('s-msg', '', null);
   }
+
+  function fillSound() {
+    var snd = state.settings.sound || {};
+    $('s-sound').checked = snd.on !== false;
+    $('s-volume').value = snd.volume != null ? snd.volume : 0.7;
+    $('s-volume-text').textContent = Math.round($('s-volume').value * 100) + '%';
+  }
+
+  function soundInput() { return { on: $('s-sound').checked, volume: parseFloat($('s-volume').value) }; }
+
+  // 소리는 "설정 저장" 없이 바로 저장한다
+  $('s-sound').addEventListener('change', function () { api.saveSettings({ sound: soundInput() }); });
+  $('s-volume').addEventListener('input', function () {
+    $('s-volume-text').textContent = Math.round($('s-volume').value * 100) + '%';
+    Sound.configure(soundInput());
+  });
+  $('s-volume').addEventListener('change', function () {
+    api.saveSettings({ sound: soundInput() });
+    Sound.play('peak');
+  });
 
   function savedScore() { return state.settings.score || {}; }
 
@@ -938,7 +1056,7 @@
     $('s-live').textContent = emg.zeroing ? '영점 재는 중… 힘을 빼세요' : '지금 거른 RMS ' + fmt(emg.rms, 1) + ' · 세기 ' + fmt(emg.strength, 1) + ' · 거르기 전 ' + fmt(emg.rmsRaw, 1);
     if (lastZeroing && !emg.zeroing) $('s-rest').value = Math.round((emg.restRms || 0) * 100) / 100; // 영점 잡기가 끝나면 입력칸에 넣는다
     lastZeroing = !!emg.zeroing;
-    var busy = g.phase === 'measuring';
+    var busy = g.phase === 'measuring' || g.phase === 'countdown';
     ['btn-cal-full', 'btn-cal-noise', 'btn-ref-measure'].forEach(function (id) { $(id).disabled = busy; });
     renderCalib();
   }
@@ -1134,6 +1252,7 @@
     $('name-modal').hidden = !want;
     if (want) {
       releaseSimKeys();
+      Sound.play('name');
       $('name-input').value = (state.name && state.name.next) || '';
       $('name-hint').textContent = nameHint();
       setTimeout(function () { $('name-input').focus(); }, 0);
@@ -1185,6 +1304,7 @@
     if (on && r.id !== celebratedId) {
       celebratedId = r.id;
       startCelebrate((r.name ? r.name + '님 ' : '') + r.rank + '위 축하드립니다!');
+      setTimeout(function () { Sound.play('hall'); }, 1000); // 결과 소리의 폭발이 끝날 즈음
     }
     if (fx && (!on || adminOpen)) stopCelebrate();
   }
