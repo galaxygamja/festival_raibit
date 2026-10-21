@@ -33,6 +33,31 @@ a:hover { color: #FFD27A; }
 #drag-bar { position: fixed; left: 0; right: 0; top: 0; height: 20px; z-index: 100; -webkit-app-region: drag; }
 body.fullscreen #drag-bar { display: none; }
 
+/* 관리자 각 페이지의 머리 줄 (제목 · 안내 · 이동 버튼) */
+.page-head { flex: none; display: flex; align-items: center; gap: 16px; }
+.page-title { flex: none; margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); white-space: nowrap; }
+.page-hint { flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* macOS 관리자 화면: 창 맨 위 제목 표시줄 (창 px 고정, 무대 확대와 무관). 높이는 app.js TITLEBAR_H, 신호등 위치는 main.js 와 맞춘다 */
+#titlebar { display: none; }
+body.mac-titlebar.admin-open #drag-bar { display: none; }
+body.mac-titlebar.admin-open #titlebar {
+  position: fixed; left: 0; right: 0; top: 0; height: 40px; z-index: 100; box-sizing: border-box;
+  display: flex; align-items: center; padding: 0 10px 0 84px;
+  background: #1C0F0D; border-bottom: 1px solid #3A2420;
+  font-family: 'Do Hyeon', sans-serif;
+  -webkit-app-region: drag;
+}
+body.mac-titlebar.admin-open.fullscreen #titlebar { padding-left: 16px; }
+#titlebar .page-head { flex: 1; min-width: 0; gap: 8px; }
+#titlebar .page-head[hidden] { display: none; }
+#titlebar .page-title { font-size: 19px; text-shadow: none; margin-right: 6px; }
+#titlebar .page-hint { font-size: 13px; color: #8E7770; }
+#titlebar .btn.nav { -webkit-app-region: no-drag; flex: none; height: 26px; padding: 0 11px; border-radius: 7px; border-width: 1px; font-size: 14px; }
+#titlebar .btn.nav:hover { background: #2A1714; }
+body.mac-titlebar .screen { padding-top: 28px; }
+body.mac-titlebar #main { padding-top: 44px; }
+
 .screen {
   position: absolute;
   inset: 0;

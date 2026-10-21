@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   setSim: (on) => ipcRenderer.invoke('sim:set', on),
   simKey: (key, down) => ipcRenderer.invoke('sim:key', key, down),
   toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
+  titlebarDoubleClick: () => ipcRenderer.invoke('window:titlebarDoubleClick'),
   zeroEmg: () => ipcRenderer.invoke('emg:zero'),
   setPortRole: (path, role) => ipcRenderer.invoke('serial:setRole', path, role),
   setDiag: (on) => ipcRenderer.invoke('diag:set', on),

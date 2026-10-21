@@ -2,7 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell, dialog, session, systemPreferences } = require('electron');
 const { Game, scoreOf, pctOf, DEFAULT_SCORE, CURVE_PRESETS } = require('./game');
 const hall = require('./hall');
 const { Store, normalizeSettings } = require('./store');
@@ -207,7 +207,8 @@ function createWindow(full) {
     autoHideMenuBar: true,
     // 제목 표시줄 없이 화면을 창 끝까지 쓴다 (macOS 신호등 버튼·Windows 창 버튼은 화면 위에 겹쳐 남김)
     titleBarStyle: 'hidden',
-    ...(IS_MAC ? {} : { titleBarOverlay: { color: '#140A09', symbolColor: '#C9B3AC', height: 24 } }),
+    // macOS 신호등 버튼은 관리자 화면 제목 표시줄(높이 40, styles.css #titlebar) 세로 가운데에 둔다
+    ...(IS_MAC ? { trafficLightPosition: { x: 16, y: 13 } } : { titleBarOverlay: { color: '#140A09', symbolColor: '#C9B3AC', height: 24 } }),
     show: false,
     title: 'raibitScoreboard',
     icon: ICON,
@@ -398,6 +399,15 @@ function setupIpc() {
     }
   });
   ipcMain.handle('window:toggleFullscreen', () => setFullscreen(!isFullscreen()));
+  // macOS 제목 표시줄 더블클릭: 시스템 설정(AppleActionOnDoubleClick)대로 확대·최소화
+  ipcMain.handle('window:titlebarDoubleClick', () => {
+    if (!win || win.isDestroyed() || isFullscreen()) return;
+    const action = IS_MAC ? systemPreferences.getUserDefault('AppleActionOnDoubleClick', 'string') : '';
+    if (action === 'None') return;
+    if (action === 'Minimize') win.minimize();
+    else if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
   ipcMain.handle('app:quit', () => app.quit());
 }
 

@@ -23,15 +23,18 @@
   // 가로가 세로의 2.4배를 넘으면 그 이상은 늘리지 않고 좌우를 비운다.
   var DESIGN_W = 1440, DESIGN_H = 900, MAX_RATIO = 2.4;
   var stageW = DESIGN_W, stageH = DESIGN_H;
+  // macOS 관리자 화면에서는 창 맨 위 제목 표시줄(#titlebar, 창 px) 아래 영역에 무대를 맞춘다
+  var TITLEBAR_H = 40;
   function fit() {
     var stage = $('stage');
-    var w = window.innerWidth, h = window.innerHeight;
+    var top = document.body.classList.contains('mac-titlebar') && document.body.classList.contains('admin-open') ? TITLEBAR_H : 0;
+    var w = window.innerWidth, h = window.innerHeight - top;
     var s = Math.min(w / DESIGN_W, h / DESIGN_H);
     stageH = h / s;
     stageW = Math.min(w / s, stageH * MAX_RATIO);
     stage.style.width = stageW + 'px';
     stage.style.height = stageH + 'px';
-    stage.style.transform = 'translate(' + (w - stageW * s) / 2 + 'px,0) scale(' + s + ')';
+    stage.style.transform = 'translate(' + (w - stageW * s) / 2 + 'px,' + top + 'px) scale(' + s + ')';
     // 세로로 긴 창: 관중 화면의 가운데 칸(점수·명예의 전당)을 키우는 정도 (높이 900 → 0, 1900 → 1, 최대 1.5. CSS --tall)
     stage.style.setProperty('--tall', Math.max(0, Math.min(1.5, (stageH - DESIGN_H) / 1000)).toFixed(4));
   }
@@ -640,11 +643,15 @@
     }
   }
 
+  var PAGE_IDS = ['admin', 'diag', 'settings'];
+  var pageHeads = PAGE_IDS.map(function (id) { return $(id).querySelector('.page-head'); });
+
   function showPage(n) {
     adminPage = n;
     $('admin').hidden = n !== 1;
     $('diag').hidden = n !== 2;
     $('settings').hidden = n !== 3;
+    pageHeads.forEach(function (head, i) { if (head.parentNode === $('titlebar')) head.hidden = i !== n - 1; });
     if (document.activeElement) document.activeElement.blur();
     api.setDiag(n === 2);
     if (n === 1) { renderAdminRows(true); renderAdmin(); } else if (n === 2) { renderDiag(); } else { fillSettings(); renderSettings(); }
@@ -656,15 +663,31 @@
   $('fs-shortcut').textContent = isMac ? 'F11 / Control + Cmd + F' : 'F11';
   $('name-shortcut').textContent = $('name-shortcut2').textContent = isMac ? 'Control + F' : 'Ctrl + F';
 
+  // macOS: 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
+  if (isMac) {
+    document.body.classList.add('mac-titlebar');
+    pageHeads.forEach(function (head) { head.hidden = true; $('titlebar').appendChild(head); });
+    // 빈 곳 더블클릭은 macOS 처럼 창 확대 (시스템 설정의 '제목 막대를 이중 클릭하면'을 따른다)
+    $('titlebar').addEventListener('dblclick', function (e) {
+      if (!e.target.closest('button')) api.titlebarDoubleClick();
+    });
+  }
+
+  function setAdminOpen(on) {
+    adminOpen = on;
+    document.body.classList.toggle('admin-open', on);
+    fit();
+  }
+
   function openAdmin() {
-    adminOpen = true;
+    setAdminOpen(true);
     releaseSimKeys();
     $('main').hidden = true;
     showPage(1);
   }
 
   function closeAdmin() {
-    adminOpen = false;
+    setAdminOpen(false);
     if (document.activeElement) document.activeElement.blur();
     $('admin').hidden = true;
     $('diag').hidden = true;

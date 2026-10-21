@@ -8,6 +8,8 @@
 </head>
 <body>
 <div id="drag-bar"></div>
+<!-- macOS 관리자 화면의 제목 표시줄: 각 페이지 머리 줄(.page-head)의 제목·버튼을 app.js 가 여기로 옮긴다 -->
+<div id="titlebar"></div>
 <div id="stage">
 
   <!-- 관중용 스코어보드 (Main.dc.html) -->
@@ -17,13 +19,13 @@
   <div id="admin" class="screen" hidden>
     <div id="app-version" style="position: absolute; right: 56px; bottom: 12px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
     <div style="position: absolute; left: 56px; bottom: 14px; font-size: 18px; color: #8E7770; pointer-events: none; white-space: nowrap">관중 화면은 이 창이 닫히면 다시 보입니다 · 열기 <span id="shortcut" style="color: #C9B3AC"></span> · 닫기 <span style="color: #C9B3AC">Esc</span> · 전체화면 <span id="fs-shortcut" style="color: #C9B3AC"></span> · 이름 입력 <span id="name-shortcut" style="color: #C9B3AC"></span></div>
-    <div style="display: flex; align-items: center; gap: 20px">
-      <h1 style="flex: none; white-space: nowrap; margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5)">관리자 모드</h1>
-      <div style="flex-grow: 1"></div>
-      <button type="button" id="btn-page2" title="연결 상태·원시값·RMS 등 진단 정보" style="flex: none; white-space: nowrap; height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer; border-color: #FFB21E; color: #FFB21E">2페이지 · 진단</button>
-      <button type="button" id="btn-page3" title="점수표·신호 필터·이름 받기·설정 파일" style="flex: none; white-space: nowrap; height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer; border-color: #FFB21E; color: #FFB21E">3페이지 · 설정</button>
-      <button type="button" id="btn-fullscreen" style="flex: none; white-space: nowrap; height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer"></button>
-      <button type="button" id="btn-close" style="flex: none; white-space: nowrap; height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 22px; cursor: pointer">스코어보드로 돌아가기</button>
+    <div class="page-head">
+      <h1 class="page-title">관리자 모드</h1>
+      <div class="page-hint"></div>
+      <button type="button" id="btn-page2" title="연결 상태·원시값·RMS 등 진단 정보" class="btn nav amber">2페이지 · 진단</button>
+      <button type="button" id="btn-page3" title="점수표·신호 필터·이름 받기·설정 파일" class="btn nav amber">3페이지 · 설정</button>
+      <button type="button" id="btn-fullscreen" class="btn nav"></button>
+      <button type="button" id="btn-close" class="btn nav">스코어보드로 돌아가기</button>
     </div>
 
     <div style="flex-grow: 1; min-height: 0; display: flex; gap: 32px">
@@ -94,11 +96,11 @@
 
   <div id="diag" class="screen" hidden>
     <div id="diag-version" style="position: absolute; right: 56px; bottom: 12px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
-    <div style="display: flex; align-items: center; gap: 20px">
-      <h1 style="margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); white-space: nowrap">관리자 모드 · 진단</h1>
-      <div style="flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">실시간 연결·신호 확인 · 닫기 Esc</div>
-      <button type="button" id="btn-page1" style="height: 52px; padding: 0 22px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 24px; cursor: pointer; white-space: nowrap">‹ 1페이지 · 기록·설정</button>
-      <button type="button" id="btn-close2" style="height: 52px; padding: 0 22px; border-radius: 14px; border: 2px solid #5A3A33; background: transparent; color: #F3E6E1; font-family: inherit; font-size: 24px; cursor: pointer; white-space: nowrap">스코어보드로 돌아가기</button>
+    <div class="page-head">
+      <h1 class="page-title">관리자 모드 · 진단</h1>
+      <div class="page-hint">실시간 연결·신호 확인 · 닫기 Esc</div>
+      <button type="button" id="btn-page1" class="btn nav">‹ 1페이지 · 기록·설정</button>
+      <button type="button" id="btn-close2" class="btn nav">스코어보드로 돌아가기</button>
     </div>
 
     <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: 560px minmax(0, 1fr) minmax(0, 1fr); gap: 16px">
@@ -182,9 +184,9 @@
 
   <div id="settings" class="screen" hidden>
     <div id="settings-version" style="position: absolute; right: 56px; bottom: 12px; font-size: 20px; color: #8E7770; pointer-events: none"></div>
-    <div style="display: flex; align-items: center; gap: 16px">
-      <h1 style="margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); white-space: nowrap">관리자 모드 · 설정</h1>
-      <div style="flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">새 노트북에서는 오른쪽 위 "자동 보정"부터</div>
+    <div class="page-head">
+      <h1 class="page-title">관리자 모드 · 설정</h1>
+      <div class="page-hint">새 노트북에서는 오른쪽 위 "자동 보정"부터</div>
       <button type="button" id="btn-p3-page1" class="btn nav">‹ 1페이지</button>
       <button type="button" id="btn-p3-page2" class="btn nav">2페이지 · 진단</button>
       <button type="button" id="btn-close3" class="btn nav">스코어보드로 돌아가기</button>
