@@ -20,6 +20,9 @@ const START_SIM = argv.includes('--sim');
 const FORCE_WINDOWED = argv.includes('--windowed');
 const FORCE_FULLSCREEN = argv.includes('--fullscreen');
 const IS_MAC = process.platform === 'darwin';
+// 개발 실행 (npm run dev): 저장소의 .dev-data 에 따로 저장하고, src 가 바뀌면 바로 다시 불러온다
+const DEV = argv.includes('--dev') && !app.isPackaged;
+if (DEV) app.setPath('userData', path.join(__dirname, '..', '..', '.dev-data'));
 // Windows 창 버튼: 관중 화면은 얇게, 관리자 화면은 제목 표시줄(높이 40, styles.css #titlebar)에 맞춘다
 const TITLEBAR_OVERLAY = {
   main: { color: '#140A09', symbolColor: '#C9B3AC', height: 24 },
@@ -257,6 +260,24 @@ function createWindow(full) {
   win.on('enter-full-screen', rememberFullscreen);
   win.on('leave-full-screen', rememberFullscreen);
   win.on('closed', () => { win = null; });
+}
+
+// renderer 가 바뀌면 창만 새로고침, main·preload 가 바뀌면 앱을 다시 띄운다 (인자는 그대로)
+function watchForDev() {
+  const src = path.join(__dirname, '..');
+  let timer = null;
+  fs.watch(src, { recursive: true }, (_, file) => {
+    if (!file) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (file.startsWith('renderer')) {
+        if (win) win.webContents.reload();
+      } else {
+        app.relaunch();
+        app.exit(0);
+      }
+    }, 150);
+  });
 }
 
 function setupMenu() {
@@ -516,6 +537,7 @@ app.whenReady().then(async () => {
   createWindow(FORCE_WINDOWED ? false : FORCE_FULLSCREEN ? true : settings.fullscreen);
   serial.start();
   if (START_SIM) sim.setEnabled(true);
+  if (DEV) watchForDev();
 
   // 100 ms 마다: 그 사이 들어온 SpikerBox 샘플을 한 구간 세기로 만들어 게임에 넣는다
   setInterval(() => {

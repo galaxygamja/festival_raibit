@@ -8,6 +8,7 @@
   "scripts": {
     "start": "electron .",
     "sim": "electron . --sim",
+    "dev": "electron . --sim --windowed --dev",
     "test": "node test/game.test.js",
     "build:win": "electron-builder --win portable nsis --x64",
     "build:mac": "electron-builder --mac dmg --arm64 --x64",
