@@ -1,6 +1,6 @@
 'use strict';
 
-// node test/game.test.js — 아두이노·Electron 없이 경기 로직, 명예의 전당, 저장, 줄 파싱을 검사한다.
+// node test/game.test.js — 아두이노, Electron 없이 경기 로직, 명예의 전당, 저장, 줄 파싱을 검사한다.
 
 const assert = require('assert');
 const fs = require('fs');
@@ -140,7 +140,7 @@ test('기준 힘 대비 % 로 점수, 0~9999 로 자름', () => {
   assert.strictEqual(toScore(6000, 2), 9999);
 });
 
-test('START 후 3·2·1 카운트다운 동안은 값을 받지 않고, 끝나면 측정 (8초 제한은 측정 시작부터)', () => {
+test('START 후 3-2-1 카운트다운 동안은 값을 받지 않고, 끝나면 측정 (8초 제한은 측정 시작부터)', () => {
   const results = [];
   const g = new Game({ getSettings: () => linear(), onResult: (r) => results.push(r) });
   assert.ok(g.start(0));
@@ -187,7 +187,7 @@ function calData(steps, { hum = 50, sq = 30, swap = false } = {}) {
 }
 const FULL_STEPS = [['rest', 50], ['prep', 25], ['squeeze', 40]];
 
-test('자동 보정: 50 Hz 지역이면 50 Hz, 힘이 보이는 채널, 영점·여유·최대 힘', () => {
+test('자동 보정: 50 Hz 지역이면 50 Hz, 힘이 보이는 채널, 영점, 여유, 최대 힘', () => {
   const r = analyzeCalibration({ rate: 10000, ...calData(FULL_STEPS, { swap: true }), current: { channel: 1, mainsHz: 60, highpassHz: 80, margin: 1.5 }, mode: 'full' });
   assert.ok(r.ok, r.error);
   assert.deepStrictEqual([r.emg.mainsHz, r.emg.channel, r.emg.notch], [50, 2, true]);
@@ -197,7 +197,7 @@ test('자동 보정: 50 Hz 지역이면 50 Hz, 힘이 보이는 채널, 영점·
   assert.deepStrictEqual(r.warnings, []);
 });
 
-test('자동 보정: 잡음만 재면 채널·고역은 그대로, 힘이 안 보이면 경고하고 채널을 바꾸지 않는다', () => {
+test('자동 보정: 잡음만 재면 채널, 고역은 그대로, 힘이 안 보이면 경고하고 채널을 바꾸지 않는다', () => {
   const noise = analyzeCalibration({ rate: 10000, ...calData([['rest', 50]], { hum: 60 }), current: { channel: 2, mainsHz: 50, highpassHz: 50 }, mode: 'noise' });
   assert.deepStrictEqual([noise.emg.mainsHz, noise.emg.channel, noise.emg.highpassHz, noise.maxStrength], [60, 2, 50, null]);
   const weak = analyzeCalibration({ rate: 10000, ...calData(FULL_STEPS, { sq: 2 }), current: { channel: 2 }, mode: 'full' });
@@ -270,7 +270,7 @@ test('같은 점수면 먼저 세운 기록이 위', () => {
   assert.deepStrictEqual(hall.hallOf(r.records).map((e) => e.name), ['선배', 'ㅇㅇㅇ']);
 });
 
-test('이름·점수 수정: 빈 이름은 ㅇㅇㅇ, 점수는 0~9999, 잘못된 점수는 무시, 순위 다시 매김', () => {
+test('이름, 점수 수정: 빈 이름은 ㅇㅇㅇ, 점수는 0~9999, 잘못된 점수는 무시, 순위 다시 매김', () => {
   const recs = seed([100, 50, 30]);
   const [a, b, c] = hall.sortRecords(recs).map((e) => e.id);
   const next = hall.editRecords(recs, {
@@ -354,7 +354,7 @@ test('설정값 범위 정리, v1 설정(calibration {p1,p2}) 이전', () => {
   assert.deepStrictEqual(s.portRoles, { a: 'start', c: 'spikerbox' });
 });
 
-test('예전 설정 이전: 거르지 않은 영점은 지우고, 보정계수·곡선·[세기, 점수] 표는 기준 힘 + % 표로', () => {
+test('예전 설정 이전: 거르지 않은 영점은 지우고, 보정계수, 곡선, [세기, 점수] 표는 기준 힘 + % 표로', () => {
   const old = normalizeSettings({ calibration: 1, emg: { channel: 1, restRms: 32.4 } });
   assert.deepStrictEqual(old.score, DEFAULT_SCORE);
   assert.strictEqual(old.emg.restRms, 0);
@@ -401,7 +401,7 @@ test('점수 곡선 점: 기준 힘(100%) = top, 9999 에 닿는 곳에서 끝, 
   assert.strictEqual(scoreFromLegacyTable([[0, 0], [10, 2000]]).ref, 10); // 7000 에 못 미치면 마지막 점이 기준
 });
 
-test('이름 넣은 기록: 이름이 남고 결과에 id·이름이 온다, 빈 이름은 ㅇㅇㅇ', () => {
+test('이름 넣은 기록: 이름이 남고 결과에 id, 이름이 온다, 빈 이름은 ㅇㅇㅇ', () => {
   const r = hall.addResult([], 5000, D, '  홍길동 ');
   assert.deepStrictEqual([r.records[0].name, r.name, r.rank, r.id], ['홍길동', '홍길동', 1, r.records[0].id]);
   assert.strictEqual(hall.addResult([], 5000, D, '').records[0].name, 'ㅇㅇㅇ');
@@ -466,13 +466,13 @@ test('classifyProbe: HWT 가 있거나 프레임 20개 이상이면 SpikerBox', 
   assert.strictEqual(classifyProbe({ messages: [{ type: 'EVNT', value: '1' }], frameCount: 5 }), false);
 });
 
-console.log('SpikerBox 파서 · 근전도 신호');
+console.log('SpikerBox 파서, 근전도 신호');
 
 const F1 = [[0], [8191], [16383], [512]];
 const F2 = [[1, 2], [8192, 100], [16383, 0]];
 const flat = (frames) => [].concat.apply([], frames);
 
-test('1채널·2채널 프레임 왕복', () => {
+test('1채널, 2채널 프레임 왕복', () => {
   assert.deepStrictEqual(new SpikerBoxParser({ channels: 1 }).push(encodeFrames(F1)).frames, F1);
   assert.deepStrictEqual(new SpikerBoxParser({ channels: 2 }).push(encodeFrames(F2)).frames, F2);
 });
@@ -651,14 +651,14 @@ test('HID: 62바이트씩 나뉜 리포트의 payload 를 디코더에 넣으면
   assert.strictEqual(unwrapReport(bad), null);
 });
 
-/** payload 를 디코더에 넣고 프레임·메시지를 모은다 */
+/** payload 를 디코더에 넣고 프레임, 메시지를 모은다 */
 function decodeAll(dec, payloads) {
   const out = { frames: [], messages: [] };
   payloads.forEach((p) => { const r = dec.push(p); out.frames.push(...r.frames); out.messages.push(...r.messages); });
   return out;
 }
 
-test('HID 디코더 (emg.py 규칙): 1023 넘는 값·길이가 틀린 프레임은 버리고 개수를 센다', () => {
+test('HID 디코더 (emg.py 규칙): 1023 넘는 값, 길이가 틀린 프레임은 버리고 개수를 센다', () => {
   const d = new HidDecoder();
   const bytes = Buffer.concat([
     encodeFrames([[512, 512], [2000, 512], [513, 511]]),
@@ -835,7 +835,7 @@ test('포트 역할 키: USB 시리얼번호가 있으면 그걸로(COM 번호�
   assert.strictEqual(roleKeyOf({ vendorId: '1a86', productId: '7523' }, 'COM4'), 'COM4');
 });
 
-test('진단: 파형은 [최소,최대] 칸으로 줄이고, 해상도·끝값 닿음·구간 통계를 낸다', () => {
+test('진단: 파형은 [최소,최대] 칸으로 줄이고, 해상도, 끝값 닿음, 구간 통계를 낸다', () => {
   assert.deepStrictEqual(buckets([1, 5, 2, 8, 3, 3], 3), [[1, 5], [2, 8], [3, 3]]);
   assert.deepStrictEqual(buckets([4, 7], 240), [[4, 4], [7, 7]]);
   const d = new Diag();

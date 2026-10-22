@@ -11,7 +11,7 @@
 | 근전도 입력 | 아두이노가 `P1 <정수>` / `P2 <정수>` 텍스트 줄을 9600 baud로 보냄 | **SpikerBox**가 보내는 바이너리 원시 파형(수 kHz)을 앱이 직접 해석 |
 | START | 같은 아두이노가 `START` 줄을 보냄 | **별도 아두이노**(START 버튼 전용)가 `START` 줄을 보냄 |
 | 플레이어 | 2명 대결, 승패 판정 | **1명**, 펀치머신처럼 기록 세우기 (승패 없음) |
-| 화면 | 위 WINNER 배너 · 아래 P1 / 명예의 전당 / P2 | 위 배너 가운데 **현재 점수** · 아래 P1 / 명예의 전당 (가운데 정렬) |
+| 화면 | 위 WINNER 배너, 아래 P1 / 명예의 전당 / P2 | 위 배너 가운데 **현재 점수**, 아래 P1 / 명예의 전당 (가운데 정렬) |
 
 아두이노로 근전도를 직접 읽던 방식은 원시값이 1 또는 1023만 나와(포화) 쓸 수 없어서 버렸다.
 
@@ -85,7 +85,7 @@ Spike Recorder의 FFT는 **화면 표시용**(0~50 Hz, 뇌파 알파파 확인)�
 - START 아두이노는 버튼을 누를 때만 줄을 보내므로 연결 여부를 알 수 없다. 그래서 스케치에서 **1초마다 `ALIVE`**를 보내게 한다.
 - 탐색 중 START 아두이노에 222222 baud로 `b:;`가 가도 깨진 바이트일 뿐 해가 없다(스케치는 입력을 읽지 않는다).
 
-## 4. 게임 · 저장 규칙 변경
+## 4. 게임, 저장 규칙 변경
 
 - 플레이어는 `p1` 하나. `p2`, `winner`, `draw` 제거.
 - 측정 종료: p1이 50칸을 채우거나 8초 제한.
@@ -121,16 +121,16 @@ Spike Recorder의 FFT는 **화면 표시용**(0~50 Hz, 뇌파 알파파 확인)�
 - **배너**(폭 980, `nowrap` 유지): "WINNER"와 승자 글자를 없애고, P1 패널에 있던 7-segment 숫자를 배너 가운데로 옮긴다. 크기는 `Seg.display(Seg.pad(v), 110, color)` 정도로 하고 배너 높이 안에 맞춘다.
   - 윗줄 작은 글씨: 대기 `PRESS START` / 측정 `5초 동안 힘껏 쥐세요` / 결과 `최종 기록`, 명예의 전당에 들어갔으면 `명예의 전당 n위!`
   - 숫자: 측정 중에는 현재 힘, 그 밖에는 최댓값(지금 `targetOf` 규칙 그대로, 애니메이션 유지).
-- **P1 패널**: 레벨 미터, `PLAYER 1`, 측정 중 `측정 n / 50 · 최고 x` + 진행 막대, 대기 중 `레벨 n / 15`.
+- **P1 패널**: 레벨 미터, `PLAYER 1`, 측정 중 `측정 n / 50, 최고 x` + 진행 막대, 대기 중 `레벨 n / 15`.
 
 ### 5.2 관리자 화면
-- 경기 제어: 상태 문구 `측정 중` / `기록 n점 · 다음 도전 대기` / `대기 중 · START 대기`. 버튼 문구 "새 경기 시작" → "측정 시작".
+- 경기 제어: 상태 문구 `측정 중` / `기록 n점, 다음 도전 대기` / `대기 중, START 대기`. 버튼 문구 "새 경기 시작" → "측정 시작".
 - 연결 카드 제목 "아두이노 연결" → "장치 연결". 행 2개:
   - **SpikerBox**: 포트, HWT, 채널 수, 초당 프레임 수, 연결 여부, 현재 RMS 막대.
   - **START 버튼**: 포트, 마지막 `START` 시각, 연결 여부.
   - 열린 포트마다 역할 드롭다운(자동 / SpikerBox / START).
 - 보정 설정: 보정계수 1개, 채널(1/2), **영점 잡기** 버튼 + 현재 휴식RMS.
-- 명예의 전당 표: "기록한 선수" 열 삭제, 날짜·시각은 이름 옆 작은 글씨로.
+- 명예의 전당 표: "기록한 선수" 열 삭제, 날짜, 시각은 이름 옆 작은 글씨로.
 
 ## 6. START 아두이노 스케치
 
@@ -147,10 +147,10 @@ Spike Recorder의 FFT는 **화면 표시용**(0~50 Hz, 뇌파 알파파 확인)�
 | Phase | 내용 | 체크리스트 | 버전 | 화면 |
 |---|---|---|---|---|
 | 1 | SpikerBox 파서 + 신호 처리 (순수 모듈) | 1, 2 | 그대로 | 변화 없음 |
-| 2 | 게임·명예의 전당·설정 1인화 | 3 | `2.0.0-beta.1` | 최소 수정 |
-| 3 | 시리얼·시뮬레이터·main 연결 + START 스케치 | 4, 5, 6, 9 | `2.0.0-beta.2` | 최소 수정 |
+| 2 | 게임, 명예의 전당, 설정 1인화 | 3 | `2.0.0-beta.1` | 최소 수정 |
+| 3 | 시리얼, 시뮬레이터, main 연결 + START 스케치 | 4, 5, 6, 9 | `2.0.0-beta.2` | 최소 수정 |
 | 4 | 화면 디자인 | 7, 8 | `2.0.0-beta.3` | 개편 |
-| 5 | 마무리 · 하드웨어 테스트 | 10, 11 | `2.0.0` | – |
+| 5 | 마무리, 하드웨어 테스트 | 10, 11 | `2.0.0` | – |
 
 **두 채팅으로 나눠 진행할 때**
 - **채팅 A (백엔드)**: Phase 1 → 2 → 3 → 5. **채팅 B (화면)**: Phase 4.
@@ -189,7 +189,7 @@ Spike Recorder의 FFT는 **화면 표시용**(0~50 Hz, 뇌파 알파파 확인)�
 **공통 규칙**
 - 코드 스타일은 주변 코드를 따른다: `'use strict'`, CommonJS, 한국어 주석은 짧게, 렌더러는 ES5 스타일(`var`, `function`).
 - 테스트는 `test/game.test.js` 한 파일에 `test('설명', () => {...})`로 추가한다. 새 모듈은 Electron과 `serialport` 없이 `require` 가능해야 한다.
-- Phase 2·3에서 화면은 **앱이 죽지 않고 동작이 보일 정도로만** 고친다. 모양은 Phase 4에서 다듬는다.
+- Phase 2, 3에서 화면은 **앱이 죽지 않고 동작이 보일 정도로만** 고친다. 모양은 Phase 4에서 다듬는다.
 
 ### Phase 1 — SpikerBox 파서 + 신호 처리
 
@@ -210,7 +210,7 @@ class SpikerBoxParser {
   reset()
 }
 function parseMessageText(text)   // 'HWT:MUSCLESS;EVNT:3;' → [{type:'HWT', value:'MUSCLESS'}, {type:'EVNT', value:'3'}]
-function encodeFrames(frames)     // number[][] → Buffer  (시뮬레이터·테스트용, 파서의 역)
+function encodeFrames(frames)     // number[][] → Buffer  (시뮬레이터, 테스트용, 파서의 역)
 function encodeMessage(text)      // 'HWT:MUSCLESS;' → ESC_START + ASCII + ESC_END 를 담은 Buffer
 module.exports = { SpikerBoxParser, parseMessageText, encodeFrames, encodeMessage, DEVICES, ESC_START, ESC_END };
 ```
@@ -248,13 +248,13 @@ module.exports = { EmgWindow, strengthOf, RestMeter };
 - `encodeMessage('HWT:MUSCLESS;')`를 프레임 사이에 끼우면 messages에 `{type:'HWT', value:'MUSCLESS'}`가 나오고 frames는 그대로. 이스케이프를 청크 중간에서 잘라도 같다.
 - `channels:'auto'`로 2채널 프레임 40개를 넣으면 `channels === 2`이고 값이 맞다.
 - `parseMessageText`: 여러 메시지, 빈 문자열, `:` 없는 조각은 무시.
-- EmgWindow: 상수 512만 넣으면 rms 0. `512 + A·sin`을 한 주기 이상 넣으면 rms ≈ A/√2(오차 1% 이내). 비어 있으면 `take()`가 null. `take()` 뒤에는 비어 있다.
+- EmgWindow: 상수 512만 넣으면 rms 0. `512 + A, sin`을 한 주기 이상 넣으면 rms ≈ A/√2(오차 1% 이내). 비어 있으면 `take()`가 null. `take()` 뒤에는 비어 있다.
 - `strengthOf(100, 30) === 70`, `strengthOf(10, 30) === 0`.
 - RestMeter: 3초 동안 넣은 RMS의 평균. 3초 전에는 `add`가 false.
 
 **완료 기준**: `npm test` 통과. `npm run sim`은 v1 그대로 동작한다.
 
-### Phase 2 — 게임 · 명예의 전당 · 설정 1인화
+### Phase 2 — 게임, 명예의 전당, 설정 1인화
 
 - [x] **3. `game.js`, `hall.js`, `store.js`, 화면 최소 수정**
 
@@ -289,7 +289,7 @@ module.exports = { EmgWindow, strengthOf, RestMeter };
 
 **완료 기준**: `npm test` 통과. `npm run sim -- --windowed`에서 S → A 누르기 → 5초 뒤 결과, 명예의 전당 갱신, 관리자 화면이 열리고 보정 저장 동작. 버전 `2.0.0-beta.1`.
 
-### Phase 3 — 시리얼 · 시뮬레이터 · main 연결 + START 스케치
+### Phase 3 — 시리얼, 시뮬레이터, main 연결 + START 스케치
 
 - [x] **4. `src/main/serial.js` 역할 판별**
 
@@ -308,7 +308,7 @@ class SerialManager extends EventEmitter {
     open: [{ path, role: 'probing'|'spikerbox'|'start', fixed: bool }],
   }
 }
-function parseLine(line)  // 'START' → {type:'start'}, 'ALIVE' → {type:'alive'}, 나머지 null (대소문자·\r·공백 무시)
+function parseLine(line)  // 'START' → {type:'start'}, 'ALIVE' → {type:'alive'}, 나머지 null (대소문자, \r, 공백 무시)
 function classifyProbe({ messages, frameCount })  // HWT 메시지가 있거나 frameCount >= 20 → true
 ```
 
@@ -319,11 +319,11 @@ function classifyProbe({ messages, frameCount })  // HWT 메시지가 있거나 
 
 - [x] **5. `src/main/sim.js` 가짜 SpikerBox**
 - 켜지면 `serial.feedSpikerBox('시뮬레이션', encodeMessage('HWT:MUSCLESS;'))`를 한 번 보낸다.
-- 10 ms마다 1채널 샘플 100개(=10 kHz)를 만들어 `encodeFrames`로 보낸다. 값 = `512 + 진폭·(사인 80 Hz + 잡음)`, 0~1023으로 자름.
+- 10 ms마다 1채널 샘플 100개(=10 kHz)를 만들어 `encodeFrames`로 보낸다. 값 = `512 + 진폭, (사인 80 Hz + 잡음)`, 0~1023으로 자름.
 - 진폭은 `A` 키를 누르는 동안 서서히 올라가고(목표 ≈ 400), 떼면 서서히 내려간다(쉬는 잡음 ≈ 5). 지금 `tick`의 따라가기 방식을 그대로 쓴다.
 - `S` 키는 지금처럼 main에서 `game.start`.
 
-- [x] **6. `main.js` · `preload.js` 연결**
+- [x] **6. `main.js`, `preload.js` 연결**
 - `const emgWin = new EmgWindow()`. `serial.on('emg', v => emgWin.add(v))`.
 - 100 ms 타이머: `w = emgWin.take()`. 있으면 `live = { rms: w.rms, strength: strengthOf(w.rms, settings.emg.restRms) }`, 영점 측정 중이면 `rest.add(w.rms, now)`(끝나면 `settings.emg.restRms = rest.result()` 저장), 그리고 `game.sample('p1', live.strength, now())`. 측정 중이 아닐 때는 game이 무시하므로 항상 불러도 된다.
 - `serial.on('start', ...)`는 그대로.
@@ -339,7 +339,7 @@ function classifyProbe({ messages, frameCount })  // HWT 메시지가 있거나 
 - `classifyProbe`: HWT만 있음 → true, 프레임 25개 → true, 프레임 5개 → false.
 - 시뮬레이터 바이트를 직접 파서 + EmgWindow에 넣으면(타이머 없이 `tick` 호출) `A`를 누른 상태의 RMS가 뗀 상태보다 10배 이상 크다.
 
-**완료 기준**: `npm test` 통과. `npm run sim -- --windowed`에서 관리자 화면에 SpikerBox `시뮬레이션 · MUSCLESS` 연결됨, A를 누르면 RMS가 오르고, 영점 잡기 후 쉬는 상태의 세기가 0 근처, S → 5초 측정 → 결과 정상. 실제 포트가 없어도 오류 없이 돈다. 버전 `2.0.0-beta.2`.
+**완료 기준**: `npm test` 통과. `npm run sim -- --windowed`에서 관리자 화면에 SpikerBox `시뮬레이션, MUSCLESS` 연결됨, A를 누르면 RMS가 오르고, 영점 잡기 후 쉬는 상태의 세기가 0 근처, S → 5초 측정 → 결과 정상. 실제 포트가 없어도 오류 없이 돈다. 버전 `2.0.0-beta.2`.
 
 ### Phase 4 — 화면 디자인
 
@@ -350,18 +350,18 @@ function classifyProbe({ messages, frameCount })  // HWT 메시지가 있거나 
 - 애니메이션 루프는 `p1` 하나만 다룬다. 배너 숫자 칸 id는 `score-digits`.
 - `renderAdminRows`가 입력 중인 이름을 지키는 동작을 유지한다.
 
-**완료 기준**: 1440×900 창과 그보다 작은 창에서 글자가 넘치거나 줄바꿈되지 않는다(특히 배너). 대기 / 측정 / 결과(전당 진입·미진입) 네 상태를 시뮬레이션으로 모두 확인. 버전 `2.0.0-beta.3`.
+**완료 기준**: 1440×900 창과 그보다 작은 창에서 글자가 넘치거나 줄바꿈되지 않는다(특히 배너). 대기 / 측정 / 결과(전당 진입, 미진입) 네 상태를 시뮬레이션으로 모두 확인. 버전 `2.0.0-beta.3`.
 
-### Phase 5 — 마무리 · 하드웨어 테스트
+### Phase 5 — 마무리, 하드웨어 테스트
 
 - [x] **10. 마무리**
   - `package.json`: version `2.0.0`, description `raibitScoreboard - 근전도 기록 측정`.
-  - README: 하드웨어 구성(SpikerBox + START 아두이노), 영점 잡기·보정 방법, 시뮬레이션 키(S/A).
+  - README: 하드웨어 구성(SpikerBox + START 아두이노), 영점 잡기, 보정 방법, 시뮬레이션 키(S/A).
   - CLAUDE.md: "(v2)" 표시와 "Current status" 절 정리, v1 설명 삭제.
   - `design/`은 초기 스펙으로 그대로 둔다.
 - [ ] **11. 하드웨어 테스트**(현장, 사용자와 함께)
   - 완료(2026-10-21, 사용자 확인): 행사 노트북에서 자동 보정 후 실제 점수 확인. 아래 나머지(macOS baud, START 버튼, Windows exe)는 아직.
-  - SpikerBox 연결 → 관리자 화면의 HWT·채널·fps 확인 → 1장 표와 다르면 이 문서 고치기.
+  - SpikerBox 연결 → 관리자 화면의 HWT, 채널, fps 확인 → 1장 표와 다르면 이 문서 고치기.
   - macOS에서 222222 baud가 열리는지(10장). 안 되면 230400으로 시도하는 코드 추가.
   - 영점 잡기 → 여러 사람이 힘껏 쥐어 보고 최고 점수가 9999에 닿지 않게 보정계수 기본값 결정.
   - START 버튼 → 측정 시작 확인. Windows exe 빌드 후 실제 Windows에서 실행.

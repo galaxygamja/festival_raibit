@@ -2,7 +2,7 @@
 
 // 기록 목록. 모든 측정 기록(0점 제외)을 { id, name, score, at } 로 남기고,
 // 명예의 전당은 그중 상위 5개(점수 내림차순, 같은 점수면 먼저 세운 기록이 위)다.
-// 관리자는 어떤 기록이든 이름·점수를 고치거나 지울 수 있다.
+// 관리자는 어떤 기록이든 이름, 점수를 고치거나 지울 수 있다.
 
 const HALL_SIZE = 5;
 const TEMP_NAME = 'ㅇㅇㅇ';
@@ -58,7 +58,7 @@ function addResult(records, score, date = new Date(), name = null) {
   return { records: next, changed: true, rank: rank || null, place: place || null, total: next.length, id: entry.id, name: entry.name };
 }
 
-/** edits: { [id]: { name?, score? } }. 없는 id·잘못된 점수는 무시. */
+/** edits: { [id]: { name?, score? } }. 없는 id, 잘못된 점수는 무시. */
 function editRecords(records, edits) {
   if (!edits || typeof edits !== 'object') return records;
   return records.map((e) => {

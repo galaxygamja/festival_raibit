@@ -6,8 +6,8 @@
 //   3) 둘 다 아니면 9600 baud 텍스트 포트(START 아두이노: `START`, `ALIVE`).
 // SpikerBox Pro 처럼 시리얼이 아니라 USB HID 로 붙는 장치(벤더 0x2E73)는 hid.js 로 열고 같은 파서에 넣는다.
 // 역할이 정해진 포트는 끊길 때까지 다시 탐색하지 않는다.
-// 포트·USB 자리가 바뀌어도 버티게:
-//   - 손으로 정한 역할은 USB 시리얼번호(있으면)로 저장해서 COM 번호·경로가 바뀌어도 따라간다.
+// 포트, USB 자리가 바뀌어도 버티게:
+//   - 손으로 정한 역할은 USB 시리얼번호(있으면)로 저장해서 COM 번호, 경로가 바뀌어도 따라간다.
 //   - HID 장치는 검색 때 목록에서 사라졌으면 닫고, 2초 동안 프레임이 없으면 start 를 다시 보내고, 그래도 없으면 다시 연다.
 //   - 열기에 계속 실패하는 포트(다른 프로그램이 쓰는 중 등)는 재시도 간격을 2초 → 최대 10초로 늘린다.
 
@@ -51,7 +51,7 @@ function normalizePath(p) {
   return p;
 }
 
-// 아두이노·SpikerBox 는 USB 장치라 vendorId 가 있다. 블루투스 이어폰·내장 COM1 같은 포트는 열지 않는다.
+// 아두이노, SpikerBox 는 USB 장치라 vendorId 가 있다. 블루투스 이어폰, 내장 COM1 같은 포트는 열지 않는다.
 const USB_NAME = /usbmodem|usbserial|wchusbserial|SLAB_USBtoUART|ttyACM|ttyUSB/i;
 function shouldSkip(info, p) {
   if (/bluetooth|debug-console|wlan/i.test(p)) return true;

@@ -111,7 +111,7 @@
   function crash(t, d) { noise({ period: 1, t: t, d: d, g: 0.2 }); }
 
   var SOUNDS = {
-    // 레이스 카운트다운: 3·2·1 낮은 삐 (0.715초 간격. game.js COUNTDOWN_MS 와 app.js 화면 숫자도 이 간격)
+    // 레이스 카운트다운: 3-2-1 낮은 삐 (0.715초 간격. game.js COUNTDOWN_MS 와 app.js 화면 숫자도 이 간격)
     count: function () {
       [0, 0.715, 1.43].forEach(function (t) { osc({ type: 'p50', f: N(69), t: t, s: 0.12, d: 0.06, g: 0.12 }); });
     },
@@ -127,7 +127,7 @@
       [84, 88, 91].forEach(function (m, i) { osc({ type: 'p25', f: N(m), t: i * 0.04, s: 0.03, d: 0.02, g: 0.08 }); });
       osc({ type: 'p25', f: N(96), t: 0.12, s: 0.08, d: 0.15, g: 0.08 });
     },
-    // 모든 결과(상위권 · 순위 밖 · 0점)에 같은 팡파르를 한 번 재생한다.
+    // 모든 결과(상위권, 순위 밖, 0점)에 같은 팡파르를 한 번 재생한다.
     result: function () {
       if (!fanfare) fanfare = new Audio('sounds/score-fanfare.wav');
       fanfare.currentTime = 0;

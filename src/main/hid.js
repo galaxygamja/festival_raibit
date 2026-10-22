@@ -11,7 +11,7 @@ const REPORT_SIZE = 64;
 const REPORT_MARK = 0x3f;
 const WRITE_MARK = 0x3e;
 const MAX_PAYLOAD = 62;
-// emg.py 와 같이 start → board 로 수집을 시작하고, 관리자 화면의 기기 정보(HWT·MSF)를 위해 질의 두 개를 뒤에 붙인다.
+// emg.py 와 같이 start → board 로 수집을 시작하고, 관리자 화면의 기기 정보(HWT, MSF)를 위해 질의 두 개를 뒤에 붙인다.
 // 실기기(2026-10-20): 이 순서도 초당 약 10,100 프레임, 디코딩 결과는 emg.py 와 같았다.
 const INIT_COMMANDS = ['start:;\n', 'board:;\n', '?:;\n', 'max:;\n'];
 const STOP_COMMAND = 'h:;\n';
@@ -29,8 +29,8 @@ function isPrefixOf(marker, pending) {
 }
 
 /**
- * HID payload → 프레임·메시지 (emg.py Decoder 와 같은 규칙).
- *  - 채널 수는 BRD 메시지로 정한다(기본 2, 확장보드 1 → 4, 4·5 → 3). 통계로 추측하지 않는다.
+ * HID payload → 프레임, 메시지 (emg.py Decoder 와 같은 규칙).
+ *  - 채널 수는 BRD 메시지로 정한다(기본 2, 확장보드 1 → 4, 4, 5 → 3). 통계로 추측하지 않는다.
  *  - 프레임은 다음 시작 바이트(0x80)가 왔을 때 길이가 정확히 2×채널이고 값이 모두 1023 이하일 때만 확정한다.
  *  - 이스케이프 구간(기기 메시지)은 1024바이트까지 받는다. 그 안의 바이트는 절대 샘플로 보지 않는다.
  */
@@ -59,7 +59,7 @@ class HidDecoder {
     return total ? this.goodFrames / total : 0;
   }
 
-  /** 형식이 깨진 리포트: emg.py 처럼 이어 붙이지 않고 진행 중이던 프레임·메시지를 버린다 */
+  /** 형식이 깨진 리포트: emg.py 처럼 이어 붙이지 않고 진행 중이던 프레임, 메시지를 버린다 */
   badReport() {
     this.badReports++;
     this._frame = [];
