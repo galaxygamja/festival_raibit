@@ -19,7 +19,7 @@ html, body {
 a { color: #FFB21E; }
 a:hover { color: #FFD27A; }
 
-/* 1440×900 디자인을 비율 유지한 채 확대·축소, 남는 방향은 늘려서 채움 (app.js fit 에서 크기·transform 지정) */
+/* 1440×900 디자인을 비율 유지한 채 확대, 축소, 남는 방향은 늘려서 채움 (app.js fit 에서 크기, transform 지정) */
 #stage {
   position: absolute;
   left: 0;
@@ -33,12 +33,12 @@ a:hover { color: #FFD27A; }
 #drag-bar { position: fixed; left: 0; right: 0; top: 0; height: 20px; z-index: 100; -webkit-app-region: drag; }
 body.fullscreen #drag-bar { display: none; }
 
-/* 관리자 각 페이지의 머리 줄 (제목 · 안내 · 이동 버튼) */
+/* 관리자 각 페이지의 머리 줄 (제목, 안내, 이동 버튼) */
 .page-head { flex: none; display: flex; align-items: center; gap: 16px; }
 .page-title { flex: none; margin: 0; font-size: 52px; font-weight: 400; color: #FFB21E; text-shadow: 0 0 14px rgba(255,178,30,0.5); white-space: nowrap; }
 .page-hint { flex-grow: 1; min-width: 0; font-size: 20px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* 관리자 화면: 창 맨 위 제목 표시줄 (창 px 고정, 무대 확대와 무관). 높이는 app.js TITLEBAR_H, 신호등·창 버튼 높이는 main.js 와 맞춘다 */
+/* 관리자 화면: 창 맨 위 제목 표시줄 (창 px 고정, 무대 확대와 무관). 높이는 app.js TITLEBAR_H, 신호등, 창 버튼 높이는 main.js 와 맞춘다 */
 #titlebar { display: none; }
 body.app-titlebar.admin-open #drag-bar { display: none; }
 body.app-titlebar.admin-open #titlebar {
@@ -51,7 +51,7 @@ body.app-titlebar.admin-open #titlebar {
 /* macOS: 왼쪽 신호등 버튼 자리를 비운다 */
 body.mac-titlebar.admin-open #titlebar { padding-left: 84px; }
 body.mac-titlebar.admin-open.fullscreen #titlebar { padding-left: 16px; }
-/* Windows: 제목·버튼을 왼쪽에 붙이고, 오른쪽 창 버튼(최소화·최대화·닫기, 46px × 3) 자리를 비운다 */
+/* Windows: 제목, 버튼을 왼쪽에 붙이고, 오른쪽 창 버튼(최소화, 최대화, 닫기, 46px × 3) 자리를 비운다 */
 body.win-titlebar.admin-open #titlebar { padding: 0 148px 0 16px; }
 body.win-titlebar.admin-open.fullscreen #titlebar { padding-right: 10px; }
 body.win-titlebar #titlebar .page-hint { order: 1; text-align: right; }
@@ -80,7 +80,7 @@ body.mac-titlebar #main { padding-top: 44px; }
 }
 #main { gap: 40px; }
 #admin { gap: 32px; }
-/* 관중 화면. 세로로 긴 창에서는 --tall(0~1.5, app.js fit)에 따라 가운데 칸의 글자·숫자·여백이 함께 커지고, 가로로 넓은 창에서는 가운데 칸이 게이지 사이를 채운다 */
+/* 관중 화면. 세로로 긴 창에서는 --tall(0~1.5, app.js fit)에 따라 가운데 칸의 글자, 숫자, 여백이 함께 커지고, 가로로 넓은 창에서는 가운데 칸이 게이지 사이를 채운다 */
 #stage { --tall: 0; }
 .main-row { flex: 1; min-height: 0; display: flex; justify-content: space-between; gap: 54px; }
 .gauge { width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px; }
@@ -106,6 +106,7 @@ body.mac-titlebar #main { padding-top: 44px; }
 .score-zoom { zoom: min(calc(1 + 1.15 * var(--tall)), 2.45); }
 .bb { height: calc(78px + 52px * var(--tall)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(8px + 8px * var(--tall)); white-space: nowrap; }
 .bb-progress { font-size: calc(30px + 14px * var(--tall)); color: #E9DAD5; }
+.bb-live-place { color: #FFB21E; text-shadow: 0 0 14px #FFB21E99; }
 .bb-bar { width: calc(520px + 120px * var(--tall)); height: calc(10px + 4px * var(--tall)); border-radius: calc(5px + 2px * var(--tall)); background: #2E1B17; overflow: hidden; }
 .bb-place { font-size: calc(60px + 28px * var(--tall)); color: #FFB21E; text-shadow: 0 0 18px #FFB21E, 0 0 44px #FFB21E80; }
 .bb-total { font-size: calc(28px + 12px * var(--tall)); color: #C9B3AC; margin-left: calc(20px + 8px * var(--tall)); }
@@ -133,6 +134,24 @@ body.mac-titlebar #main { padding-top: 44px; }
 .hall-place { font-size: 36px; color: #C9B3AC; }
 .hall-name { flex-grow: 1; min-width: 0; font-size: calc(30px + 22px * var(--tall)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hall-score { zoom: calc(1 + 0.75 * var(--tall)); flex: none; }
+
+/* 집중 화면: 카운트다운, 측정 중 (app.js renderMain). 게이지와 명예의 전당이 빠지고 배너가 화면을 채운다.
+   배경은 무지개 픽셀 격자 캔버스 (app.js scrollBackground) */
+.flow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 0.35s; image-rendering: pixelated; }
+#main.focus .flow { opacity: 1; }
+.main-row { position: relative; }
+#main.focus .gauge, #main.focus .hall { display: none; }
+#main.focus .main-center { justify-content: center; }
+#main.focus .banner {
+  flex: 1 0 auto; gap: 40px; background: rgba(20, 10, 9, 0.25);
+  animation: focus-in 0.35s ease-out;
+}
+#main.focus .score-zoom { zoom: min(calc(2.6 + 1.2 * var(--tall)), 4); }
+#main.focus .banner-label { zoom: 1.4; }
+#main.focus .bb { zoom: 1.4; }
+/* 카운트다운 중에는 3-2-1 픽셀 숫자만 보이게 점수와 아래 줄을 숨긴다 */
+#main.counting .score-zoom, #main.counting #banner-bottom { visibility: hidden; }
+@keyframes focus-in { from { transform: scale(0.94); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
 
 #diag { gap: 20px; }
 #diag ::-webkit-scrollbar { width: 8px; }
@@ -223,7 +242,7 @@ body.mac-titlebar #main { padding-top: 44px; }
 .trow input { box-sizing: border-box; width: 100%; height: 40px; padding: 0 10px; border-radius: 10px; font-family: inherit; font-size: 22px; color: #F3E6E1; background: #120807; border: 2px solid #4A2E28; user-select: text; font-variant-numeric: tabular-nums; }
 .trow .slope { font-size: 18px; color: #B8A29B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* 이름 입력창 · 축하 */
+/* 이름 입력창, 축하 */
 #name-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 4, 3, 0.72); z-index: 20; font-family: 'Do Hyeon', sans-serif; color: #F3E6E1; }
 #name-modal[hidden] { display: none; }
 #name-modal input { user-select: text; }
@@ -268,7 +287,7 @@ body.mac-titlebar #main { padding-top: 44px; }
 #celebrate div { padding: 14px 44px; border-radius: 26px; background: rgba(28, 15, 13, 0.92); border: 3px solid #FFB21E; font-size: 68px; color: #FFD27A; white-space: nowrap; text-shadow: 0 0 18px #FFB21E, 0 0 44px rgba(255,178,30,0.6); box-shadow: 0 0 40px rgba(255,178,30,0.5); animation: pop 0.5s ease-out; }
 @keyframes pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* 3·2·1 카운트다운 (숫자마다 0.715초, 5×7 픽셀 글꼴) */
+/* 3-2-1 카운트다운 (숫자마다 0.715초, 5×7 픽셀 글꼴) */
 #countdown { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 12; background: rgba(12, 5, 4, 0.6); }
 #countdown[hidden] { display: none; }
 #countdown-num { display: grid; grid-template-columns: repeat(5, 52px); grid-auto-rows: 52px; gap: 6px; filter: drop-shadow(0 0 26px rgba(255, 46, 26, 0.65)); animation: count-pop 0.715s steps(1, end) both; }

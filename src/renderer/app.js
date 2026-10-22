@@ -18,7 +18,7 @@
     });
   }
 
-  // ───────────────────────── 창 크기에 맞춰 확대·축소 ─────────────────────────
+  // ───────────────────────── 창 크기에 맞춰 확대, 축소 ─────────────────────────
   // 1440×900 을 최소 크기로 비율을 유지해 확대하고, 남는 방향으로 무대(디자인 px)를 늘려 창을 채운다.
   // 가로가 세로의 2.4배를 넘으면 그 이상은 늘리지 않고 좌우를 비운다.
   var DESIGN_W = 1440, DESIGN_H = 900, MAX_RATIO = 2.4;
@@ -56,7 +56,7 @@
     stage.style.width = stageW + 'px';
     stage.style.height = stageH + 'px';
     stage.style.transform = 'translate(' + (w - stageW * s) / 2 + 'px,' + top + 'px) scale(' + s + ')';
-    // 세로로 긴 창: 관중 화면의 가운데 칸(점수·명예의 전당)을 키우는 정도 (높이 900 → 0, 1900 → 1, 최대 1.5. CSS --tall)
+    // 세로로 긴 창: 관중 화면의 가운데 칸(점수, 명예의 전당)을 키우는 정도 (높이 900 → 0, 1900 → 1, 최대 1.5. CSS --tall)
     stage.style.setProperty('--tall', Math.max(0, Math.min(1.5, (stageH - DESIGN_H) / 1000)).toFixed(4));
   }
   window.addEventListener('resize', fit);
@@ -75,7 +75,7 @@
     return Math.max(0, Math.min(15, Math.round((v / MAX_SCORE) * 15)));
   }
 
-  // 왼쪽·오른쪽에 똑같이 놓는 세로 게이지 (아래 1 → 위 15). 칸은 한 번 만들고, 단계가 바뀔 때만 칸 스타일을 바꾼다.
+  // 왼쪽, 오른쪽에 똑같이 놓는 세로 게이지 (아래 1 → 위 15). 칸은 한 번 만들고, 단계가 바뀔 때만 칸 스타일을 바꾼다.
   function cellStyle(i, lit) {
     var c = RAINBOW[i - 1];
     return 'flex:1;min-height:0;border-radius:16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:calc(24px + 14px * var(--tall));' + (lit ? 'background:' + c + ';color:#1A0D0B;box-shadow:0 0 10px ' + c + ',0 0 26px ' + c + '66' : 'background:' + c + '12;color:' + c + '66;border:1px solid ' + c + '30');
@@ -134,11 +134,19 @@
     return html;
   }
 
+  // 지금까지의 최고로 끝나면 명예의 전당 몇 위인지 (5위 밖이면 0). 같은 점수는 먼저 세운 기록이 앞선다
+  function placeIfNow(best) {
+    if (!(best > 0)) return 0;
+    var place = 1 + (state.hall || []).filter(function (r) { return r && r.score >= best; }).length;
+    return place <= 5 ? place : 0;
+  }
+
   // 배너 아래 줄: 대기 / 측정 / 결과(내 순위)
   function bannerBottom(phase, g, res) {
     if (phase === 'measuring') {
       var p = player(P1_COLOR, g.p1.samples, g.samplesNeeded, g.p1.score);
-      return '<div class="bb"><div class="bb-progress">측정 ' + p.samples + ' / ' + g.samplesNeeded + ' · 최고 ' + p.best + '</div>' +
+      var place = placeIfNow(p.best);
+      return '<div class="bb"><div class="bb-progress">측정 ' + p.samples + ' / ' + g.samplesNeeded + (place ? ', <span class="bb-live-place">지금 기록이면 ' + place + '위</span>' : '') + '</div>' +
         '<div class="bb-bar"><div style="' + p.bar + '"></div></div></div>';
     }
     if (phase === 'result') {
@@ -175,14 +183,17 @@
     var phase = g.phase;
     var res = resultInfo(phase === 'result' ? state.result : null);
     var nm = state.name || {};
-    var who = function (n) { return n ? esc(n) + '님 · ' : ''; };
+    var who = function (n) { return n ? esc(n) + '님, ' : ''; };
     var labels = {
-      idle: nm.next ? '다음 도전자 · ' + esc(nm.next) + '님' : '다음 경기 대기',
+      idle: nm.next ? '다음 도전자: ' + esc(nm.next) + '님' : '다음 경기 대기',
       countdown: who(nm.current) + '준비하세요',
       measuring: who(nm.current) + '5초 동안 힘껏 쥐세요',
-      result: who(state.result && state.result.name) + (res.rank ? '최종 기록 · 명예의 전당 ' + res.rank + '위!' : '최종 기록'),
+      result: who(state.result && state.result.name) + (res.rank ? '최종 기록, 명예의 전당 ' + res.rank + '위!' : '최종 기록'),
     };
     if (!$('banner-label')) buildMain();
+    // 카운트다운, 측정 중에는 게이지와 명예의 전당을 숨기고 점수만 화면 가득 보여 준다
+    $('main').classList.toggle('focus', phase === 'countdown' || phase === 'measuring');
+    $('main').classList.toggle('counting', phase === 'countdown');
     setHtml($('banner-label'), labels[phase]);
     setHtml($('banner-bottom'), bannerBottom(phase, g, res));
     setHtml($('hall-rows'), hallRows(state.hall));
@@ -201,6 +212,7 @@
 
     var gauge = function (id) { return '<div id="' + id + '" class="gauge">' + gaugeCells() + '</div>'; };
     $('main').innerHTML =
+      '<canvas id="flow" class="flow"></canvas>' +
       '<div class="main-row">' +
       gauge('gauge-l') +
       '<div class="main-center">' + banner + hall + '</div>' +
@@ -249,6 +261,7 @@
       // 측정 중 숫자가 오르는 속도만큼 화면이 떨린다
       if (state.game.phase === 'measuring' && shown.p1 > before) bump(Math.min(7, (shown.p1 - before) / dt * 1.2));
       applyShake(t, dt);
+      scrollBackground(dt);
       drawCountdown(t);
       // 현재 힘 소리는 화면 숫자와 같은 부드러운 값을 따라간다 (점수 상한 = 1)
       if (state.game.phase === 'measuring') {
@@ -279,7 +292,62 @@
     el.style.transform = 'translate(' + ((Math.random() * 2 - 1) * shake).toFixed(1) + 'px,' + ((Math.random() * 2 - 1) * shake).toFixed(1) + 'px)';
   }
 
-  // ───────────────────────── 3·2·1 카운트다운 ─────────────────────────
+  // ───────────────────────── 배경 흐름 ─────────────────────────
+  // 집중 화면(#main.focus)의 배경: 게이지 무지개색 픽셀 격자. 칸은 위로 흐르고, 아래부터 현재 힘만큼 밝게 차오른다.
+  // 색은 화면 높이(아래 파랑 → 위 노랑)로, 반짝임 무늬는 칸마다 붙어 함께 올라간다.
+  var CELL = 18, GAP = 3; // 디자인 px
+  var SCROLL_BASE = 40, SCROLL_MAX = 700; // 디자인 px/초
+  var RGB = RAINBOW.map(function (c) { return [1, 3, 5].map(function (i) { return parseInt(c.substr(i, 2), 16); }); });
+  var scrollPx = 0, flowT = 0;
+
+  function hash(x, y) {
+    var h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return h - Math.floor(h);
+  }
+
+  function rainbowAt(t) { // t: 0(아래) ~ 1(위)
+    var f = Math.max(0, Math.min(1, t)) * (RGB.length - 1), i = Math.min(RGB.length - 2, Math.floor(f)), k = f - i;
+    return [0, 1, 2].map(function (j) { return Math.round(RGB[i][j] + (RGB[i + 1][j] - RGB[i][j]) * k); });
+  }
+
+  function scrollBackground(dt) {
+    var g = state.game;
+    if (g.phase !== 'countdown' && g.phase !== 'measuring') return;
+    var cv = $('flow');
+    if (!cv) return;
+    var W = cv.clientWidth, H = cv.clientHeight;
+    if (!W || !H) return;
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    var fill = g.phase === 'measuring' ? Math.min(1, shown.p1 / MAX_SCORE) : 0;
+    scrollPx += (SCROLL_BASE + SCROLL_MAX * fill) * dt / 1000;
+    flowT += dt / 1000;
+
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = '#140A09';
+    ctx.fillRect(0, 0, W, H);
+    var cols = Math.ceil(W / CELL) + 1, rows = Math.ceil(H / CELL) + 2;
+    var base = Math.floor(scrollPx / CELL), frac = scrollPx - base * CELL;
+    var x0 = (W - cols * CELL) / 2;
+    var edge = fill * H;
+    for (var r = -1; r < rows; r++) { // -1: 새 줄이 화면 아래 밖에서 들어오게 (0부터면 맨 아래 줄이 갑자기 나타나 깜빡인다)
+      var id = r - base;                 // 칸 무늬의 고유 줄 번호 (흐름과 함께 위로)
+      var yb = r * CELL + frac;          // 아래에서 칸 아래쪽까지
+      var y = H - yb - CELL;
+      var rgb = rainbowAt((yb + CELL / 2) / H);
+      for (var c = 0; c < cols; c++) {
+        var n = hash(c, id);
+        var jag = (Math.sin(c * 0.55 + flowT * 3.1) + Math.sin(c * 1.37 - flowT * 2.3)) * CELL * 0.6 * Math.min(1, fill * 8);
+        var d = edge + jag - (yb + CELL / 2); // 차오른 경계까지 거리 (양수 = 안쪽)
+        var a, k = 1, w = 0;
+        if (d > 0) { a = 1; k = 0.72 + 0.28 * n; if (d < CELL * 1.5) w = 0.5; } // 차오른 칸은 불투명, 밝기만 칸마다 조금씩 다르다. 경계 칸은 흰빛
+        else a = 0.05 + 0.07 * n + (n > 0.985 ? 0.35 * (0.5 + 0.5 * Math.sin(flowT * 6 + c)) : 0);
+        ctx.fillStyle = 'rgba(' + [0, 1, 2].map(function (j) { return Math.round(rgb[j] * k + (255 - rgb[j] * k) * w); }).join(',') + ',' + Math.min(1, a).toFixed(3) + ')';
+        ctx.fillRect(Math.round(x0 + c * CELL), Math.round(y), CELL - GAP, CELL - GAP);
+      }
+    }
+  }
+
+  // ───────────────────────── 3-2-1 카운트다운 ─────────────────────────
   // 삐 소리와 같은 시계(카운트다운 상태를 받은 순간)로 0.715초마다 숫자를 바꾼다. 숫자는 5×7 픽셀 글꼴
   var COUNT_STEP_MS = 715;
   var PIXEL_DIGITS = {
@@ -347,12 +415,12 @@
   var MEDAL = ['#FFC83D', '#D3DAE2', '#D88A4E'];
   var renderedHallKey = '';
 
-  // 경기 제어 카드 우상단 상태: 카운트다운 · 측정 · 결과 · 대기
+  // 경기 제어 카드 우상단 상태: 카운트다운, 측정, 결과, 대기
   function stateLabel(g) {
     if (g.phase === 'countdown') return ['카운트다운', '#7BE08A'];
     if (g.phase === 'measuring') return ['측정 중', '#7BE08A'];
-    if (g.phase === 'result') return ['기록 ' + g.p1.score + '점 · 다음 도전 대기', AMBER];
-    return ['대기 중 · START 대기', '#C9B3AC'];
+    if (g.phase === 'result') return ['기록 ' + g.p1.score + '점, 다음 도전 대기', AMBER];
+    return ['대기 중, START 대기', '#C9B3AC'];
   }
 
   // 전체 기록은 payload 에 없고, recordsRev 가 바뀔 때마다 records:get 으로 받아 온다 (점수 내림차순)
@@ -389,7 +457,7 @@
     var list = visibleRecords();
     var key = JSON.stringify([showAll, list]);
     if (!force && key === renderedHallKey) return;
-    // 입력 중이던 값은 기록 id·칸 기준으로 살려 둔다
+    // 입력 중이던 값은 기록 id, 칸 기준으로 살려 둔다
     var drafts = {};
     if (!force) {
       document.querySelectorAll('#rows input[data-id]').forEach(function (el) {
@@ -451,19 +519,19 @@
   function renderPorts() {
     var ps = state.ports || {}, sb = ps.spikerbox || {}, st = ps.start || {}, open = ps.open || [];
     var emg = state.emg || {};
-    // 포트·연결 정보가 바뀔 때만 다시 그린다
+    // 포트, 연결 정보가 바뀔 때만 다시 그린다
     var key = JSON.stringify([sb, st, open.length, ps.openError]);
     if (key !== renderedPortsKey) {
       renderedPortsKey = key;
       var sbDetail = sb.connected || sb.path
-        ? [sb.path, sb.hwt, sb.channels ? sb.channels + '채널' : '', sb.fps ? sb.fps + ' fps' : ''].filter(Boolean).join(' · ')
+        ? [sb.path, sb.hwt, sb.channels ? sb.channels + '채널' : '', sb.fps ? sb.fps + ' fps' : ''].filter(Boolean).join(', ')
         : ps.openError
-          ? '열기 실패 · Spike Recorder 등 다른 프로그램이 쓰는 중인지 확인 (' + ps.openError + ')'
-          : '신호 없음 · 열린 포트 ' + open.length + '개';
+          ? '열기 실패, Spike Recorder 등 다른 프로그램이 쓰는 중인지 확인 (' + ps.openError + ')'
+          : '신호 없음, 열린 포트 ' + open.length + '개';
       var bar = '<div style="margin: 6px 0 2px 24px; height: 8px; border-radius: 4px; background: #2E1B17; overflow: hidden"><div id="rms-bar" style="height: 100%; width: 0; background: ' + AMBER + '; box-shadow: 0 0 8px ' + AMBER + '"></div></div>';
       var stDetail = st.connected || st.path
-        ? [st.path, '마지막 START ' + timeText(st.lastStartAt)].filter(Boolean).join(' · ')
-        : '신호 없음 · 마지막 START ' + timeText(st.lastStartAt);
+        ? [st.path, '마지막 START ' + timeText(st.lastStartAt)].filter(Boolean).join(', ')
+        : '신호 없음, 마지막 START ' + timeText(st.lastStartAt);
       $('ports').innerHTML =
         port('SpikerBox', sbDetail, !!sb.connected, '#FF6A45', bar) +
         port('START 버튼', stDetail, !!st.connected, '#FFB21E');
@@ -489,7 +557,7 @@
     $('btn-zero').disabled = zeroing;
     $('btn-zero').textContent = zeroing ? '재는 중…' : '영점 잡기';
     $('rest-text').textContent = '휴식 ' + (emg.restRms != null ? emg.restRms : (state.settings.emg || {}).restRms || 0).toFixed(1) +
-      (emg.raw != null ? ' · 원시 ' + emg.raw + ' · RMS ' + (emg.rms || 0).toFixed(1) + ' · ' + (emg.score || 0) + '점' : '');
+      (emg.raw != null ? ', 원시 ' + emg.raw + ', RMS ' + (emg.rms || 0).toFixed(1) + ', ' + (emg.score || 0) + '점' : '');
   }
 
   function renderAdmin() {
@@ -589,7 +657,7 @@
       g.moveTo(x, y(b[1]) - 1); g.lineTo(x, y(b[0]) + 1);
     });
     g.stroke();
-    $('d-scope-range').textContent = '세로 ' + fmt(y0) + ' ~ ' + fmt(y1) + ' · 평균선 ' + fmt(sig.sec.mean, 1);
+    $('d-scope-range').textContent = '세로 ' + fmt(y0) + ' ~ ' + fmt(y1) + ', 평균선 ' + fmt(sig.sec.mean, 1);
   }
 
   var LABEL_COLORS = { '쉼': '#5AA9E6', '약하게': '#7BE08A', '중간': '#FFB21E', '최대': '#FF5A47' };
@@ -623,7 +691,7 @@
     g.fillStyle = DIM; g.font = '24px sans-serif';
     g.fillText('최대 ' + fmt(top / 1.1, 1), 10, 28);
     var last = h.length ? h[h.length - 1] : null;
-    if (last) { g.textAlign = 'right'; g.fillText('지금 RMS ' + fmt(last[0], 1) + ' · 세기 ' + fmt(last[1], 1), W - 10, 28); g.textAlign = 'left'; }
+    if (last) { g.textAlign = 'right'; g.fillText('지금 RMS ' + fmt(last[0], 1) + ', 세기 ' + fmt(last[1], 1), W - 10, 28); g.textAlign = 'left'; }
     g.fillText('-30초', 6, PH - 8);
   }
 
@@ -639,9 +707,9 @@
       b.style.color = on ? '#140A09' : '#F3E6E1';
       b.style.borderColor = on ? col : '#5A3A33';
     });
-    var counts = Object.keys(r.labelCounts || {}).map(function (k) { return k + ' ' + (r.labelCounts[k] / 10).toFixed(1) + '초'; }).join(' · ');
+    var counts = Object.keys(r.labelCounts || {}).map(function (k) { return k + ' ' + (r.labelCounts[k] / 10).toFixed(1) + '초'; }).join(', ');
     $('d-rec').innerHTML = kv([
-      ['상태', r.on ? '녹화 중 · ' + dur(r.elapsed) : '꺼짐', r.on ? BAD : null],
+      ['상태', r.on ? '녹화 중, ' + dur(r.elapsed) : '꺼짐', r.on ? BAD : null],
       ['구간 (0.1초)', r.on ? r.rows.toLocaleString() + '개' : null],
       ['표시한 시간', counts || null],
       ['파일', r.on ? r.file : r.lastFile ? r.lastFile + ' (저장됨)' : null, !r.on && r.lastFile ? GOOD : null],
@@ -668,7 +736,7 @@
       ['최소 ~ 최대 (100 ms)', sig.win.n ? sig.win.min + ' ~ ' + sig.win.max : '-'],
       ['RMS (거른 뒤)', fmt(emg.rms, 1)],
       ['RMS (거르기 전)', fmt(emg.rmsRaw, 1)],
-      ['휴식 RMS (영점)', fmt(emg.restRms, 1) + (emg.zeroing ? ' · 재는 중' : '')],
+      ['휴식 RMS (영점)', fmt(emg.restRms, 1) + (emg.zeroing ? ', 재는 중' : '')],
       ['세기 = RMS − 휴식', fmt(emg.strength, 1)],
       ['점수 (기준 힘의 ' + fmt(emg.pct, 0) + '%)', String(score)],
       ['초당 샘플', sig.rate ? sig.rate.toLocaleString() : '-'],
@@ -691,11 +759,11 @@
     });
     var msgs = spEntry ? Object.keys(spEntry.msgs).map(function (k) { return k + ':' + spEntry.msgs[k]; }).join('  ') : '';
     $('d-spiker').innerHTML = kv([
-      ['상태', sb.connected ? '연결됨 · 신호 수신 중' : sb.path ? '열려 있지만 신호 없음' : '찾지 못함', sb.connected ? GOOD : BAD],
+      ['상태', sb.connected ? '연결됨, 신호 수신 중' : sb.path ? '열려 있지만 신호 없음' : '찾지 못함', sb.connected ? GOOD : BAD],
       ['연결 방식', spEntry && spEntry.transport === 'sim' ? '시뮬레이션' : sb.transport === 'hid' ? 'USB HID' : sb.transport === 'serial' ? '시리얼 ' + sb.baud + ' baud' : null],
       ['장치', sb.name],
       ['HWT', sb.hwt],
-      ['채널', sb.channels ? sb.channels + '채널 · 쓰는 채널 ' + ((set.emg || {}).channel || 1) : null],
+      ['채널', sb.channels ? sb.channels + '채널, 쓰는 채널 ' + ((set.emg || {}).channel || 1) : null],
       ['프레임/초', sb.fps ? sb.fps.toLocaleString() : '0'],
       ['채널 판별 신뢰도', spEntry ? spEntry.confidence + '%' : null],
       ['마지막 프레임', spEntry ? ago(spEntry.lastFrameAgo) : null],
@@ -717,14 +785,14 @@
       ['샘플', g.p1 ? g.p1.samples + ' / ' + g.samplesNeeded : null],
       ['최고 (최종 점수)', g.p1 ? g.p1.score : null],
       ['방금 값', g.p1 ? g.p1.current : null],
-      ['마지막 결과', state.result ? state.result.score + '점 · 전체 ' + (state.result.place || '-') + '위 / ' + state.result.total : '없음'],
+      ['마지막 결과', state.result ? state.result.score + '점, 전체 ' + (state.result.place || '-') + '위 / ' + state.result.total : '없음'],
       ['기록 수', state.recordsTotal],
     ]);
 
     var portHtml = ser.entries.map(function (e) {
       var ok = e.mode === 'spikerbox' ? e.fps > 0 : e.mode === 'text' ? e.lastAliveAgo != null && e.lastAliveAgo < 3000 : false;
       var bits = [MODE_NAMES[e.mode] || e.mode, e.transport === 'hid' ? 'HID' : e.transport === 'sim' ? '시뮬레이션' : e.baud ? e.baud + ' baud' : '',
-        e.mode === 'spikerbox' ? e.fps.toLocaleString() + ' fps' : '', e.fixed ? '역할 고정' : '자동', e.hwt || ''].filter(Boolean).join(' · ');
+        e.mode === 'spikerbox' ? e.fps.toLocaleString() + ' fps' : '', e.fixed ? '역할 고정' : '자동', e.hwt || ''].filter(Boolean).join(', ');
       return '<div style="padding: 6px 10px; border-radius: 10px; background: #241411">' +
         '<div style="display: flex; gap: 8px; align-items: center; font-size: 17px"><span style="width: 10px; height: 10px; border-radius: 5px; flex: none; background:' + (ok ? '#4CD964' : '#FF5A47') + '"></span>' +
         '<span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap" title="' + esc(e.path) + '">' + esc(e.path) + '</span></div>' +
@@ -733,22 +801,22 @@
         '</div>';
     }).join('');
     if (!ser.entries.length) portHtml = '<div style="font-size: 17px; color: ' + DIM + '">열린 포트 없음</div>';
-    var hidHtml = '<div style="font-size: 16px; color: #B8A29B; margin-top: 4px">BackyardBrains HID 장치 (0x2E73)' + (ser.hidListOk ? '' : ' · 목록 읽기 실패') + '</div>' +
+    var hidHtml = '<div style="font-size: 16px; color: #B8A29B; margin-top: 4px">BackyardBrains HID 장치 (0x2E73)' + (ser.hidListOk ? '' : ', 목록 읽기 실패') + '</div>' +
       (ser.hidDevices.length ? ser.hidDevices.map(function (h) {
         return '<div style="font-size: 14px; color: #C9B3AC; margin-left: 10px; overflow-wrap: anywhere">' +
-          esc([h.product || '이름 없음', h.vendorId + ':' + h.productId, h.serialNumber ? 'S/N ' + h.serialNumber : '', h.usagePage ? 'usage ' + h.usagePage : ''].filter(Boolean).join(' · ')) + '</div>';
+          esc([h.product || '이름 없음', h.vendorId + ':' + h.productId, h.serialNumber ? 'S/N ' + h.serialNumber : '', h.usagePage ? 'usage ' + h.usagePage : ''].filter(Boolean).join(', ')) + '</div>';
       }).join('') : '<div style="font-size: 14px; color: ' + DIM + '; margin-left: 10px">없음</div>');
     var failHtml = ser.failures.length ? '<div style="font-size: 16px; color: ' + BAD + '; margin-top: 4px">열기 재시도 대기</div>' + ser.failures.map(function (f) {
-      return '<div style="font-size: 14px; color: #C9B3AC; margin-left: 10px; overflow-wrap: anywhere">' + esc(f.key) + ' · ' + f.count + '번 실패 · ' + (f.waitMs / 1000).toFixed(1) + '초 뒤</div>';
+      return '<div style="font-size: 14px; color: #C9B3AC; margin-left: 10px; overflow-wrap: anywhere">' + esc(f.key) + ', ' + f.count + '번 실패, ' + (f.waitMs / 1000).toFixed(1) + '초 뒤</div>';
     }).join('') : '';
     $('d-ports').innerHTML = portHtml + hidHtml + failHtml;
 
     var env = d.env;
     $('d-env').innerHTML = kv([
-      ['버전', 'v' + state.version + (env.packaged ? ' · 설치본' : ' · 개발 실행')],
+      ['버전', 'v' + state.version + (env.packaged ? ', 설치본' : ', 개발 실행')],
       ['실행 시간', dur(env.uptime)],
-      ['환경', env.platform + ' ' + env.arch + ' · Electron ' + env.electron],
-      ['점수표 · 채널', nPts + '점 · ' + ((set.emg || {}).channel || 1) + '번'],
+      ['환경', env.platform + ' ' + env.arch + ', Electron ' + env.electron],
+      ['점수표, 채널', nPts + '점, ' + ((set.emg || {}).channel || 1) + '번'],
       ['시뮬레이션', state.sim ? '켜짐' : '꺼짐', state.sim ? AMBER : null],
     ]) + '<div style="font-size: 13px; color: #8E7770; overflow-wrap: anywhere" title="' + esc(state.dataDir || '') + '">데이터 폴더 ' + esc(state.dataDir || '-') + '</div>';
 
@@ -784,8 +852,8 @@
   $('name-shortcut').textContent = $('name-shortcut2').textContent = isMac ? 'Control + F' : 'Ctrl + F';
   $('guide-shortcut').textContent = isMac ? 'Control + /' : 'Ctrl + /';
 
-  // 세 페이지의 머리 줄(제목·버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id·클릭 처리는 그대로다.
-  // macOS 는 신호등 오른쪽에서 버튼을 오른쪽 끝으로, Windows 는 제목·버튼을 왼쪽에 붙이고 오른쪽은 창 버튼 자리로 둔다.
+  // 세 페이지의 머리 줄(제목, 버튼)을 창 맨 위 제목 표시줄로 옮긴다. 요소를 그대로 옮기므로 id, 클릭 처리는 그대로다.
+  // macOS 는 신호등 오른쪽에서 버튼을 오른쪽 끝으로, Windows 는 제목, 버튼을 왼쪽에 붙이고 오른쪽은 창 버튼 자리로 둔다.
   document.body.classList.add('app-titlebar', isMac ? 'mac-titlebar' : 'win-titlebar');
   pageHeads.forEach(function (head) { head.hidden = true; $('titlebar').appendChild(head); });
   // 빈 곳 더블클릭은 macOS 처럼 창 확대 (시스템 설정의 '제목 막대를 이중 클릭하면'을 따른다). Windows 는 끌기 영역이 직접 처리한다.
@@ -827,7 +895,7 @@
     msg.style.color = ok ? '#7BE08A' : '#FF8A7A';
   }
 
-  /** 바뀐 이름·점수만 모아서 저장 */
+  /** 바뀐 이름, 점수만 모아서 저장 */
   function saveRecords() {
     var edits = {}, count = 0, bad = 0;
     document.querySelectorAll('#rows input[data-id]').forEach(function (el) {
@@ -852,7 +920,7 @@
   }
 
   // ───────────────────────── 확인 창 (window.confirm 대신, #stage 안에 그려서 화면 배율을 따른다) ─────────────────────────
-  // askConfirm({ title, message, ok, cancel, danger }) → Promise<boolean>. Enter: 포커스된 버튼, Esc·바깥 클릭: 취소
+  // askConfirm({ title, message, ok, cancel, danger }) → Promise<boolean>. Enter: 포커스된 버튼, Esc, 바깥 클릭: 취소
   var askDone = null; // 열려 있으면 닫는 함수
 
   function askConfirm(o) {
@@ -865,7 +933,7 @@
     $('ask-cancel').textContent = o.cancel || '취소';
     $('ask-modal').querySelector('.ask-box').classList.toggle('danger', !!o.danger);
     $('ask-modal').hidden = false;
-    // 지우기·종료처럼 되돌릴 수 없는 일은 취소 버튼에 먼저 포커스를 둔다
+    // 지우기, 종료처럼 되돌릴 수 없는 일은 취소 버튼에 먼저 포커스를 둔다
     (o.danger ? $('ask-cancel') : $('ask-ok')).focus();
     return new Promise(function (resolve) {
       askDone = function (yes) {
@@ -1186,8 +1254,8 @@
     var livePct = pctOfStrength(emg.strength), maxPct = maxS ? pctOfStrength(maxS) : 0;
     drawTable(livePct, maxPct);
     $('t-live').textContent = '지금 힘 = 기준의 ' + fmt(livePct, 0) + '% → ' + scoreFromTable(livePct, sc.points) + '점' +
-      (maxS ? ' · 마지막 측정 최고 ' + fmt(maxPct, 0) + '% → ' + scoreFromTable(maxPct, sc.points) + '점' : '');
-    $('s-live').textContent = emg.zeroing ? '영점 재는 중… 힘을 빼세요' : '지금 거른 RMS ' + fmt(emg.rms, 1) + ' · 세기 ' + fmt(emg.strength, 1) + ' · 거르기 전 ' + fmt(emg.rmsRaw, 1);
+      (maxS ? ', 마지막 측정 최고 ' + fmt(maxPct, 0) + '% → ' + scoreFromTable(maxPct, sc.points) + '점' : '');
+    $('s-live').textContent = emg.zeroing ? '영점 재는 중… 힘을 빼세요' : '지금 거른 RMS ' + fmt(emg.rms, 1) + ', 세기 ' + fmt(emg.strength, 1) + ', 거르기 전 ' + fmt(emg.rmsRaw, 1);
     if (lastZeroing && !emg.zeroing) $('s-rest').value = Math.round((emg.restRms || 0) * 100) / 100; // 영점 잡기가 끝나면 입력칸에 넣는다
     lastZeroing = !!emg.zeroing;
     var busy = g.phase === 'measuring' || g.phase === 'countdown';
@@ -1286,7 +1354,7 @@
     $('cal-bar').style.width = Math.min(100, c.elapsed / c.total * 100) + '%';
     var emg = state.emg || {};
     var secs = Math.ceil(c.left / 1000);
-    if (c.phase === 'rest') { $('cal-big').textContent = '힘을 빼고 가만히'; $('cal-sub').textContent = secs + '초 · 센서를 붙인 채 팔을 편하게 두세요 (지금 RMS ' + fmt(emg.rms, 1) + ')'; }
+    if (c.phase === 'rest') { $('cal-big').textContent = '힘을 빼고 가만히'; $('cal-sub').textContent = secs + '초, 센서를 붙인 채 팔을 편하게 두세요 (지금 RMS ' + fmt(emg.rms, 1) + ')'; }
     else if (c.phase === 'prep') { $('cal-big').textContent = '곧 최대로 꽉! ' + secs; $('cal-sub').textContent = '신호가 나오면 4초 동안 최대로 쥐고 버티세요'; }
     else if (c.phase === 'squeeze') { $('cal-big').innerHTML = '<span style="color:#FF6A45">지금 최대로 꽉!</span> ' + secs; $('cal-sub').textContent = '지금 RMS ' + fmt(emg.rms, 1); }
     else { $('cal-big').textContent = r && r.ok ? (r.warnings.length ? '확인이 필요합니다' : '측정 완료') : '보정 실패'; $('cal-sub').textContent = r && r.ok ? '바뀌는 값을 보고 적용하세요' : ''; }
@@ -1315,7 +1383,7 @@
         var a = e0[x[1]], b = e1[x[1]];
         var same = typeof a === 'number' && Math.abs(a - b) < 0.01;
         return x[0] + ' ' + (same ? fmt(b, x[3]) + x[2] : fmt(a, x[3]) + ' → <b>' + fmt(b, x[3]) + x[2] + '</b>');
-      }).join(' · ') + '</div>');
+      }).join(', ') + '</div>');
     }
     if (r.mode === 'max') out.push('<div class="cal-line change">기준 힘 세기 ' + fmt(savedScore().ref, 1) + ' → <b>' + fmt(r.maxStrength, 1) + '</b> (이 힘이 ' + sc.top + '점)</div>');
     r.report.forEach(function (l) { out.push('<div class="cal-line" style="font-size: 16px; color: #8E7770">' + esc(l) + '</div>'); });
@@ -1340,7 +1408,7 @@
       $('sc-ref').value = sc.ref;
       renderScoreEditor();
       var when = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-      $('cal-last').textContent = when + ' ' + (c.mode === 'max' ? '기준 힘 ' + fmt(s.score.ref, 1) : '보정 적용') + (r.warnings.length ? ' (경고 ' + r.warnings.length + '개)' : '') + ' · 저장됨';
+      $('cal-last').textContent = when + ' ' + (c.mode === 'max' ? '기준 힘 ' + fmt(s.score.ref, 1) : '보정 적용') + (r.warnings.length ? ' (경고 ' + r.warnings.length + '개)' : '') + ', 저장됨';
       settingsMsg('s-msg', '보정 결과를 저장했습니다.', true);
     });
   });
@@ -1362,7 +1430,7 @@
   $('btn-import').addEventListener('click', function () {
     api.importSettings().then(function (r) {
       if (r.canceled) return;
-      settingsMsg('file-msg', r.ok ? '가져왔습니다: ' + r.file + ' · "잡음만" 보정을 하세요' : '가져오기 실패: ' + r.error, r.ok);
+      settingsMsg('file-msg', r.ok ? '가져왔습니다: ' + r.file + ', "잡음만" 보정을 하세요' : '가져오기 실패: ' + r.error, r.ok);
       if (r.ok) api.getState().then(function (st) { state = st; fillSettings(); });
     });
   });
@@ -1379,27 +1447,17 @@
 
   function renderNameModal() {
     var want = nameModalWanted();
-    if (want === nameShown) {
-      if (want) $('name-hint').textContent = nameHint();
-      return;
-    }
+    if (want === nameShown) return;
     nameShown = want;
     $('name-modal').hidden = !want;
     if (want) {
       releaseSimKeys();
       Sound.play('name');
-      $('name-hint').textContent = nameHint();
       $('name-input').value = (state.name && state.name.next) || '';
       setTimeout(function () { $('name-input').focus(); }, 0);
     } else if (document.activeElement === $('name-input')) {
       $('name-input').blur();
     }
-  }
-
-  function nameHint() {
-    return state.name && state.name.prompt
-      ? 'Enter: 바로 시작 · 비우고 Enter: 이름 없이 시작 · Esc: 취소'
-      : 'Enter: 저장 (START 를 누르면 시작) · Esc: 닫기';
   }
 
   function openNameModal() {
@@ -1513,13 +1571,13 @@
     // [그룹 이름, 부제, [[설명, 키 목록(배열 하나 = 함께 누름, '/' = 또는, '~' = 범위)], …], 메모]
     var cols = [
       [
-        ['관리자 화면', '', [['열기 · 닫기', [C, 'D']], ['닫기', ['Esc']], ['조작 안내 열기 · 닫기', [C, '/']]]],
-        ['기록', '1페이지', [['이름 · 점수 고친 뒤 저장', ['Enter']]]],
-        ['진단', '2페이지', [['지금 하는 동작 표시', ['0', '~', '4']]], '0 없음 · 1 쉼 · 2 약하게 · 3 중간 · 4 최대']
+        ['관리자 화면', '', [['열기, 닫기', [C, 'D']], ['닫기', ['Esc']], ['조작 안내 열기, 닫기', [C, '/']]]],
+        ['기록', '1페이지', [['이름, 점수 고친 뒤 저장', ['Enter']]]],
+        ['진단', '2페이지', [['지금 하는 동작 표시', ['0', '~', '4']]], '0 없음, 1 쉼, 2 약하게, 3 중간, 4 최대']
       ],
       [
         ['화면', '', [['전체화면 전환', ['F11']]].concat(isMac ? [['전체화면 전환', [C, 'Cmd', 'F']]] : [], [['결과 → 대기 화면', [C, 'A']]])],
-        ['도전자 이름', '관중 화면', [['입력창 열기 · 닫기', [C, 'F']], ['이름 넣고 시작', ['Enter']], ['빈 칸으로 시작 (ㅇㅇㅇ)', ['Enter']], ['취소', ['Esc']]]]
+        ['도전자 이름', '관중 화면', [['입력창 열기, 닫기', [C, 'F']], ['이름 넣고 시작', ['Enter']], ['빈 칸으로 시작 (ㅇㅇㅇ)', ['Enter']], ['취소', ['Esc']]]]
       ],
       [
         ['확인 창', '', [['고른 버튼 누르기', ['Enter']], ['취소', ['Esc']], ['버튼 옮기기', ['Tab']]]],
@@ -1582,7 +1640,7 @@
   }
 
   window.addEventListener('keydown', function (e) {
-    // 확인 창이 떠 있으면 (포커스가 창 밖으로 나갔어도) Esc 는 취소만 하고 다른 단축키·시뮬레이션 키는 받지 않는다
+    // 확인 창이 떠 있으면 (포커스가 창 밖으로 나갔어도) Esc 는 취소만 하고 다른 단축키, 시뮬레이션 키는 받지 않는다
     if (askDone) {
       if (e.key === 'Escape') { e.preventDefault(); askDone(false); }
       return;
@@ -1598,7 +1656,7 @@
       if (adminOpen && !e.repeat) openGuide();
       return;
     }
-    // 전체화면 ↔ 창 모드 (관중 화면·관리자 화면 어디서나)
+    // 전체화면 ↔ 창 모드 (관중 화면, 관리자 화면 어디서나)
     if (e.key === 'F11' || (isMac && e.code === 'KeyF' && e.ctrlKey && e.metaKey)) {
       e.preventDefault();
       if (!e.repeat) toggleFullscreenSnap();

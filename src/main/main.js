@@ -155,7 +155,7 @@ function cleanPersonName(name) {
   return s || null;
 }
 
-const EXPORT_KEYS = ['score', 'askName', 'emg']; // 포트 역할·전체화면은 노트북마다 다르므로 빼고, 영점은 가져올 때 지금 값을 쓴다
+const EXPORT_KEYS = ['score', 'askName', 'emg']; // 포트 역할, 전체화면은 노트북마다 다르므로 빼고, 영점은 가져올 때 지금 값을 쓴다
 
 function push(force) {
   if (!win || win.isDestroyed()) return;
@@ -179,7 +179,7 @@ function saveSettings() {
   }
 }
 
-let windowedBounds = null; // macOS: 전체화면에 들어가기 전 창 위치·크기
+let windowedBounds = null; // macOS: 전체화면에 들어가기 전 창 위치, 크기
 
 /** 전체화면(kiosk) ↔ 창 모드. 고른 방식은 다음 실행 때도 유지된다. */
 // macOS 에서는 setKiosk 가 창 크기를 바꾸지 않는 경우가 있어(상태만 kiosk) 즉시 덮는 simple fullscreen 을 쓴다.
@@ -229,7 +229,7 @@ function createWindow(full) {
     // macOS 에 fullscreen: false 를 넘기면 초록 버튼의 전체화면이 꺼지므로 Windows 에만 넘긴다
     ...(IS_MAC ? { fullscreenable: true } : { kiosk: full, fullscreen: full }),
     autoHideMenuBar: true,
-    // 제목 표시줄 없이 화면을 창 끝까지 쓴다 (macOS 신호등 버튼·Windows 창 버튼은 화면 위에 겹쳐 남김)
+    // 제목 표시줄 없이 화면을 창 끝까지 쓴다 (macOS 신호등 버튼, Windows 창 버튼은 화면 위에 겹쳐 남김)
     titleBarStyle: 'hidden',
     // macOS 신호등 버튼은 관리자 화면 제목 표시줄(높이 40, styles.css #titlebar) 세로 가운데에 둔다
     ...(IS_MAC ? { trafficLightPosition: { x: 16, y: 13 } } : { titleBarOverlay: TITLEBAR_OVERLAY.main }),
@@ -262,7 +262,7 @@ function createWindow(full) {
   win.on('closed', () => { win = null; });
 }
 
-// renderer 가 바뀌면 창만 새로고침, main·preload 가 바뀌면 앱을 다시 띄운다 (인자는 그대로)
+// renderer 가 바뀌면 창만 새로고침, main, preload 가 바뀌면 앱을 다시 띄운다 (인자는 그대로)
 function watchForDev() {
   const src = path.join(__dirname, '..');
   let timer = null;
@@ -405,7 +405,7 @@ function setupIpc() {
     else { require('fs').mkdirSync(recorder.dir, { recursive: true }); shell.openPath(recorder.dir); }
   });
   ipcMain.handle('emg:zero', () => { rest.start(now()); zeroStartedAt = now(); push(); });
-  // 자동 보정: mode = full (쉼 → 최대 힘, 신호 설정 전부 + 기준 힘) | noise (쉼만, 전원·영점·여유) | max (최대 힘만, 기준 힘)
+  // 자동 보정: mode = full (쉼 → 최대 힘, 신호 설정 전부 + 기준 힘) | noise (쉼만, 전원, 영점, 여유) | max (최대 힘만, 기준 힘)
   ipcMain.handle('calib:start', (_e, mode) => {
     if (game.busy) return false;
     rest.stop();
@@ -429,7 +429,7 @@ function setupIpc() {
   });
   ipcMain.handle('serial:setRole', (_e, p, role) => {
     if (typeof p !== 'string' || !['auto', 'spikerbox', 'start'].includes(role)) return false;
-    // USB 시리얼번호가 있는 포트는 그 키로 저장해서 COM 번호·경로가 바뀌어도 역할이 따라가게 한다
+    // USB 시리얼번호가 있는 포트는 그 키로 저장해서 COM 번호, 경로가 바뀌어도 역할이 따라가게 한다
     const key = serial.roleKeyOf(p);
     const roles = { ...settings.portRoles };
     delete roles[p];
@@ -457,7 +457,7 @@ function setupIpc() {
     }
   });
   ipcMain.handle('window:toggleFullscreen', () => setFullscreen(!isFullscreen()));
-  // macOS 제목 표시줄 더블클릭: 시스템 설정(AppleActionOnDoubleClick)대로 확대·최소화
+  // macOS 제목 표시줄 더블클릭: 시스템 설정(AppleActionOnDoubleClick)대로 확대, 최소화
   ipcMain.handle('window:titlebarDoubleClick', () => {
     if (!win || win.isDestroyed() || isFullscreen()) return;
     const action = IS_MAC ? systemPreferences.getUserDefault('AppleActionOnDoubleClick', 'string') : '';

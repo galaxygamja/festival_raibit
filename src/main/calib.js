@@ -1,16 +1,16 @@
 'use strict';
 
-// 자동 보정 (관리자 3페이지). 쉬는 동안과 최대로 힘 주는 동안 원시 샘플을 모두 모아, 이 노트북·이 장소에 맞는 신호 설정을 고른다.
+// 자동 보정 (관리자 3페이지). 쉬는 동안과 최대로 힘 주는 동안 원시 샘플을 모두 모아, 이 노트북, 이 장소에 맞는 신호 설정을 고른다.
 //   전원 주파수: 쉼 신호를 60 Hz / 50 Hz 노치로 각각 걸러 쉼 RMS 가 더 낮은 쪽
-//   채널·고역 통과: 후보마다 "최대 힘 ÷ 쉴 때 흔들림 상한"이 가장 큰 조합 (차이가 작으면 지금 값을 둔다)
-//   영점·여유: 고른 설정으로 쉴 때 구간 RMS 의 평균과, 그 위로 흔들리는 폭
+//   채널, 고역 통과: 후보마다 "최대 힘 ÷ 쉴 때 흔들림 상한"이 가장 큰 조합 (차이가 작으면 지금 값을 둔다)
+//   영점, 여유: 고른 설정으로 쉴 때 구간 RMS 의 평균과, 그 위로 흔들리는 폭
 //   최대 힘: 고른 설정으로 힘 준 구간 세기의 최댓값 (점수표의 기준 힘 = 100%)
 // 구간은 실제 점수 경로처럼 메인의 100 ms 타이머로 끊는다. 순수 함수(analyzeCalibration)와 시간을 인자로 받는 진행기(AutoCal)로 나눠 테스트한다.
 
 const { EmgFilter } = require('./emg');
 
 const MAINS = [60, 50];
-const HIGHPASS = [30, 50, 80, 120]; // 30 Hz 아래는 팔·전선 움직임이 커서 후보에서 뺀다
+const HIGHPASS = [30, 50, 80, 120]; // 30 Hz 아래는 팔, 전선 움직임이 커서 후보에서 뺀다
 const SETTLE_WINDOWS = 3; // 필터가 자리 잡는 동안의 첫 구간들은 빼고 본다
 const MIN_RATIO = 2.5; // 최대 힘이 쉼 흔들림 상한의 이 배수보다 작으면 "힘 준 신호가 안 보인다"
 const KEEP_IF_WITHIN = 0.1; // 후보가 지금 설정보다 10% 이상 낫지 않으면 지금 설정을 둔다
@@ -114,10 +114,10 @@ function analyzeCalibration({ rate = 10000, channels = [], windows = [], current
     const pick = best.m.restMid < other.m.restMid * 0.97 ? best.hz : cur.mainsHz;
     emg.mainsHz = pick;
     emg.notch = true;
-    out.report.push('전원 잡음: ' + pick + ' Hz 로 거름 (쉴 때 RMS ' + by.map((b) => b.hz + ' Hz ' + round(b.m.restMid, 1)).join(' · ') + ')');
+    out.report.push('전원 잡음: ' + pick + ' Hz 로 거름 (쉴 때 RMS ' + by.map((b) => b.hz + ' Hz ' + round(b.m.restMid, 1)).join(', ') + ')');
   }
 
-  // 2) 채널·고역 통과: 최대 힘이 쉼 흔들림 위로 가장 많이 올라오는 조합
+  // 2) 채널, 고역 통과: 최대 힘이 쉼 흔들림 위로 가장 많이 올라오는 조합
   if (mode === 'full' && hasRest && hasSq) {
     const cands = [];
     for (let c = 0; c < chCount; c++) {
@@ -128,7 +128,7 @@ function analyzeCalibration({ rate = 10000, channels = [], windows = [], current
     let best = cands[0];
     if (curCand && curCand.m.ratio >= best.m.ratio * (1 - KEEP_IF_WITHIN)) best = curCand;
     if (best.m.ratio < MIN_RATIO) {
-      out.warnings.push('힘 줄 때 신호가 쉴 때와 거의 같습니다 (' + round(best.m.ratio, 1) + '배). 전극 위치·연결을 확인하고, 최대로 꽉 쥐면서 다시 해 주세요. 채널·고역은 그대로 둡니다.');
+      out.warnings.push('힘 줄 때 신호가 쉴 때와 거의 같습니다 (' + round(best.m.ratio, 1) + '배). 전극 위치, 연결을 확인하고, 최대로 꽉 쥐면서 다시 해 주세요. 채널, 고역은 그대로 둡니다.');
     } else {
       channel = best.c;
       emg.channel = best.c + 1;
@@ -139,16 +139,16 @@ function analyzeCalibration({ rate = 10000, channels = [], windows = [], current
       const top = cands.filter((x) => x.c === c).sort((a, b) => b.m.ratio - a.m.ratio)[0];
       perCh.push('채널 ' + (c + 1) + ' ' + round(top.m.ratio, 1) + '배');
     }
-    out.report.push('채널: ' + emg.channel + ' (최대 힘 ÷ 쉴 때 상한: ' + perCh.join(' · ') + ')');
+    out.report.push('채널: ' + emg.channel + ' (최대 힘 ÷ 쉴 때 상한: ' + perCh.join(', ') + ')');
     out.report.push('고역 통과: ' + emg.highpassHz + ' Hz (' + HIGHPASS.map((hp) => {
       const x = cands.find((y) => y.c === channel && y.hp === hp);
       return hp + ' Hz ' + round(x.m.ratio, 1) + '배';
-    }).join(' · ') + ')');
+    }).join(', ') + ')');
   }
 
   const fin = measure(channels[channel], windows, rate, { mainsHz: emg.mainsHz, notch: emg.notch, highpassHz: emg.highpassHz });
 
-  // 3) 영점·여유: 쉴 때 중간값, 그리고 쉴 때 흔들림이 0점이 되도록 그 위 폭 × 1.5 + 0.5
+  // 3) 영점, 여유: 쉴 때 중간값, 그리고 쉴 때 흔들림이 0점이 되도록 그 위 폭 × 1.5 + 0.5
   if (hasRest) {
     if (fin.rest.length < 10) {
       out.error = '쉬는 동안 신호가 너무 적게 들어왔습니다. 다시 해 주세요.';
@@ -157,7 +157,7 @@ function analyzeCalibration({ rate = 10000, channels = [], windows = [], current
     emg.restRms = round(fin.restMid, 2);
     emg.margin = Math.max(MARGIN_MIN, round((fin.restHigh - fin.restMid) * 1.5 + 0.5, 1));
     const spread = fin.restHigh - fin.restMid;
-    out.report.push('영점 ' + emg.restRms + ' · 여유 ' + emg.margin + ' (쉴 때 거른 RMS ' + round(fin.restMid, 1) + ', 흔들림 +' + round(spread, 1) + ')');
+    out.report.push('영점 ' + emg.restRms + ', 여유 ' + emg.margin + ' (쉴 때 거른 RMS ' + round(fin.restMid, 1) + ', 흔들림 +' + round(spread, 1) + ')');
     if (spread > Math.max(3, fin.restMid)) out.warnings.push('쉬는 동안 신호가 많이 흔들렸습니다. 팔을 움직였거나 잡음이 큰 곳일 수 있습니다. 가만히 있는 상태로 다시 해 보세요.');
   }
 

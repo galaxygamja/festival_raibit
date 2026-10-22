@@ -1,12 +1,12 @@
 'use strict';
 
 // 경기 상태 기계. 시간은 항상 인자로 받아서(now, ms) 테스트에서 시계를 마음대로 돌릴 수 있게 한다.
-//   IDLE --start--> COUNTDOWN --2.145초 (3·2·1)--> MEASURING --50개(0.1초 × 50 = 5초) 또는 8초--> RESULT
+//   IDLE --start--> COUNTDOWN --2.145초 (3-2-1)--> MEASURING --50개(0.1초 × 50 = 5초) 또는 8초--> RESULT
 //   RESULT --start--> COUNTDOWN
 // 측정이 끝나면 판정 대기 없이 바로 결과. 최종 점수는 50개 값 중 최댓값. 1인 기록 모드.
 
 const PHASE = { IDLE: 'idle', COUNTDOWN: 'countdown', MEASURING: 'measuring', RESULT: 'result' };
-const COUNTDOWN_MS = 2145; // 화면의 3·2·1 과 삐 소리(0, 0.715, 1.43초)에 맞춘다 (한 칸 0.715초)
+const COUNTDOWN_MS = 2145; // 화면의 3-2-1 과 삐 소리(0, 0.715, 1.43초)에 맞춘다 (한 칸 0.715초)
 const SAMPLES_NEEDED = 50;
 const MEASURE_TIMEOUT_MS = 8000;
 const MAX_SCORE = 9999;
@@ -15,10 +15,10 @@ const MAX_SCORE = 9999;
 // toScore 는 2.1.7 설정을 옮길 때만 쓴다.
 const DEFAULT_CURVE = 0.6;
 
-// 2.1.8 의 점수표 [세기, 점수] 기본값 (옮기기용). 보정 176 · 곡선 0.6 과 거의 같다.
+// 2.1.8 의 점수표 [세기, 점수] 기본값 (옮기기용). 보정 176, 곡선 0.6 과 거의 같다.
 const DEFAULT_SCORE_TABLE = [[0, 0], [2, 1300], [5, 2300], [10, 3500], [20, 5300], [31, 7000], [45, 8700], [57, 9999]];
 
-// 점수 설정 settings.score (2.1.9~). 세기는 장치·전극·필터마다 크기가 달라서, 점수표는 "기준 힘"에 대한 % 로 둔다.
+// 점수 설정 settings.score (2.1.9~). 세기는 장치, 전극, 필터마다 크기가 달라서, 점수표는 "기준 힘"에 대한 % 로 둔다.
 //   ref    기준 힘 (세기). 운영자가 최대로 쥐었을 때의 세기를 재서 넣는다 (자동 보정 / "최대 힘 재기"). 이 힘이 100%
 //   top    곡선 버튼으로 만들 때 기준 힘(100%)의 점수
 //   curve  곡선 모양 (지수, 1 = 직선, 작을수록 처음에 점수가 빨리 오르고 높은 점수는 어렵다). 점을 직접 고치면 null
@@ -148,7 +148,7 @@ class Game {
     return this.phase === PHASE.COUNTDOWN || this.phase === PHASE.MEASURING;
   }
 
-  /** START 버튼(물리 / 관리자 / 시뮬레이션). 카운트다운·측정 중에는 무시. */
+  /** START 버튼(물리 / 관리자 / 시뮬레이션). 카운트다운, 측정 중에는 무시. */
   start(now) {
     if (this.busy) return false;
     this.phase = this.countdownMs > 0 ? PHASE.COUNTDOWN : PHASE.MEASURING;
@@ -157,7 +157,7 @@ class Game {
     return true;
   }
 
-  /** 경기 중지 · 기록하지 않음. 카운트다운·측정 중일 때만 동작. */
+  /** 경기 중지, 기록하지 않음. 카운트다운, 측정 중일 때만 동작. */
   stop() {
     if (!this.busy) return false;
     this.phase = PHASE.IDLE;
@@ -165,7 +165,7 @@ class Game {
     return true;
   }
 
-  /** 결과 화면을 비우고 대기로 (기록 전체 삭제 뒤). 카운트다운·측정 중에는 무시. */
+  /** 결과 화면을 비우고 대기로 (기록 전체 삭제 뒤). 카운트다운, 측정 중에는 무시. */
   clear() {
     if (this.busy) return false;
     this.phase = PHASE.IDLE;

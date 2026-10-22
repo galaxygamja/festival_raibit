@@ -42,7 +42,7 @@ button:focus-visible{outline:2px solid #FFB21E;outline-offset:3px}
             <label for="{{r.id}}" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">{{r.rank}}위 이름</label>
             <input id="{{r.id}}" type="text" value="{{r.name}}" style="{{r.input}}">
             <sc-if value="{{r.temp}}" hint-placeholder-val="{{false}}">
-              <div style="font-size: 18px; color: #FFB21E">임시 이름 · 실제 이름을 입력하세요</div>
+              <div style="font-size: 18px; color: #FFB21E">임시 이름, 실제 이름을 입력하세요</div>
             </sc-if>
           </div>
           <div style="font-size: 34px; color: #FFB21E; font-variant-numeric: tabular-nums">{{r.score}}</div>
@@ -61,7 +61,7 @@ button:focus-visible{outline:2px solid #FFB21E;outline-offset:3px}
         <h2 style="margin: 0; font-size: 32px; font-weight: 400">경기 제어</h2>
         <div style="font-size: 22px; color: #C9B3AC">현재 상태: <span style="{{stateStyle}}">{{stateText}}</span></div>
         <button type="button" style="height: 72px; border-radius: 16px; border: 0; background: #FF4A1C; color: #1A0D0B; font-family: inherit; font-size: 30px; cursor: pointer; box-shadow: 0 0 26px rgba(255,74,28,0.5)">새 경기 시작</button>
-        <button type="button" style="height: 56px; border-radius: 16px; border: 2px solid #FF8A7A; background: transparent; color: #FF8A7A; font-family: inherit; font-size: 24px; cursor: pointer">경기 중지 · 기록하지 않음</button>
+        <button type="button" style="height: 56px; border-radius: 16px; border: 2px solid #FF8A7A; background: transparent; color: #FF8A7A; font-family: inherit; font-size: 24px; cursor: pointer">경기 중지, 기록하지 않음</button>
         <div style="font-size: 19px; color: #B8A29B">새 경기 시작은 기계의 START 버튼과 같습니다. 0점이 나오는 등 이상한 경기는 중지하면 명예의 전당에 남지 않고 대기 화면으로 돌아갑니다.</div>
       </div>
 
@@ -123,7 +123,7 @@ class Component extends DCLogic {
     return {
       rows: rows,
       pending: pending,
-      stateText: 'DRAW · 재경기 대기',
+      stateText: 'DRAW, 재경기 대기',
       stateStyle: 'color:#FFB21E',
       ports: [
         port('PLAYER 1 아두이노', '[포트 이름]', true, '#FF6A45'),

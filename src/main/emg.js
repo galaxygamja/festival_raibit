@@ -1,6 +1,6 @@
 'use strict';
 
-// SpikerBox 샘플 → 100 ms 구간 AC RMS (PLAN.md 2장). 구간 평균을 빼므로 중심값·드리프트를 몰라도 된다.
+// SpikerBox 샘플 → 100 ms 구간 AC RMS (PLAN.md 2장). 구간 평균을 빼므로 중심값, 드리프트를 몰라도 된다.
 
 class EmgWindow {
   constructor() {

@@ -68,7 +68,7 @@ function clampNum(v, min, max, def) {
   return Math.max(min, Math.min(max, n));
 }
 
-// v2.1.7 의 보정계수·곡선 → 같은 모양의 점수표. 기본값(176 · 0.6)이거나 없으면 기본 표
+// v2.1.7 의 보정계수, 곡선 → 같은 모양의 점수표. 기본값(176, 0.6)이거나 없으면 기본 표
 function tableFromCalibration(cal, curve) {
   const c = Number(cal), k = curve === undefined ? 0.6 : Number(curve);
   if (!(c > 0) || (c === 176 && k === 0.6) || c === 1) return DEFAULT_SCORE_TABLE.map((p) => p.slice());
@@ -90,7 +90,7 @@ function normalizeSettings(raw) {
   // v2.1.6 까지는 거르지 않은 RMS 기준이라 영점이 맞지 않는다 → 지운다
   const old = s.emg && typeof s.emg === 'object' && !emg.filtered;
   return {
-    // 2.1.9~ score, 2.1.8 은 [세기, 점수] 표, 2.1.7 은 보정계수·곡선
+    // 2.1.9~ score, 2.1.8 은 [세기, 점수] 표, 2.1.7 은 보정계수, 곡선
     score: cleanScore(s.score) || scoreFromLegacyTable(cleanScoreTable(s.scoreTable) || tableFromCalibration(old ? null : cal, s.scoreCurve)),
     askName: typeof s.askName === 'boolean' ? s.askName : DEFAULT_SETTINGS.askName,
     sound: {

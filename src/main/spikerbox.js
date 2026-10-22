@@ -142,7 +142,7 @@ class SpikerBoxParser {
   }
 }
 
-/** 테스트·시뮬레이터용: number[][] → Buffer (파서의 역) */
+/** 테스트, 시뮬레이터용: number[][] → Buffer (파서의 역) */
 function encodeFrames(frames) {
   const bytes = [];
   frames.forEach((f) => {

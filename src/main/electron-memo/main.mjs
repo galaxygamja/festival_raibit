@@ -262,6 +262,6 @@ export async function installMemoLayer({
   } else {
     session.setPreloads([...session.getPreloads(), preloadPath]);
   }
-  logger.log?.(`[memo] Ctrl+G to leave a memo, Ctrl+Shift+G for the list · store ${storeDir}`);
+  logger.log?.(`[memo] Ctrl+G to leave a memo, Ctrl+Shift+G for the list, store ${storeDir}`);
   return { storeDir };
 }
