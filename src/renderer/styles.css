@@ -106,6 +106,7 @@ body.mac-titlebar #main { padding-top: 44px; }
 .score-zoom { zoom: min(calc(1 + 1.15 * var(--tall)), 2.45); }
 .bb { height: calc(78px + 52px * var(--tall)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(8px + 8px * var(--tall)); white-space: nowrap; }
 .bb-progress { font-size: calc(30px + 14px * var(--tall)); color: #E9DAD5; }
+.bb-live-place { color: #FFB21E; text-shadow: 0 0 14px #FFB21E99; }
 .bb-bar { width: calc(520px + 120px * var(--tall)); height: calc(10px + 4px * var(--tall)); border-radius: calc(5px + 2px * var(--tall)); background: #2E1B17; overflow: hidden; }
 .bb-place { font-size: calc(60px + 28px * var(--tall)); color: #FFB21E; text-shadow: 0 0 18px #FFB21E, 0 0 44px #FFB21E80; }
 .bb-total { font-size: calc(28px + 12px * var(--tall)); color: #C9B3AC; margin-left: calc(20px + 8px * var(--tall)); }
@@ -133,6 +134,24 @@ body.mac-titlebar #main { padding-top: 44px; }
 .hall-place { font-size: 36px; color: #C9B3AC; }
 .hall-name { flex-grow: 1; min-width: 0; font-size: calc(30px + 22px * var(--tall)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hall-score { zoom: calc(1 + 0.75 * var(--tall)); flex: none; }
+
+/* 집중 화면: 카운트다운·측정 중 (app.js renderMain). 게이지와 명예의 전당이 빠지고 배너가 화면을 채운다.
+   배경은 무지개 픽셀 격자 캔버스 (app.js scrollBackground) */
+.flow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 0.35s; image-rendering: pixelated; }
+#main.focus .flow { opacity: 1; }
+.main-row { position: relative; }
+#main.focus .gauge, #main.focus .hall { display: none; }
+#main.focus .main-center { justify-content: center; }
+#main.focus .banner {
+  flex: 1 0 auto; gap: 40px; background: rgba(20, 10, 9, 0.25);
+  animation: focus-in 0.35s ease-out;
+}
+#main.focus .score-zoom { zoom: min(calc(2.6 + 1.2 * var(--tall)), 4); }
+#main.focus .banner-label { zoom: 1.4; }
+#main.focus .bb { zoom: 1.4; }
+/* 카운트다운 중에는 3·2·1 픽셀 숫자만 보이게 점수와 아래 줄을 숨긴다 */
+#main.counting .score-zoom, #main.counting #banner-bottom { visibility: hidden; }
+@keyframes focus-in { from { transform: scale(0.94); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
 
 #diag { gap: 20px; }
 #diag ::-webkit-scrollbar { width: 8px; }

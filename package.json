@@ -1,7 +1,7 @@
 {
   "name": "raibit-scoreboard",
   "productName": "raibitScoreboard",
-  "version": "2.1.15",
+  "version": "2.1.16",
   "description": "raibitScoreboard - 근전도 기록 측정",
   "main": "src/main/main.js",
   "private": true,

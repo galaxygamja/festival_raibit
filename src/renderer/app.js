@@ -134,11 +134,19 @@
     return html;
   }
 
+  // 지금까지의 최고로 끝나면 명예의 전당 몇 위인지 (5위 밖이면 0). 같은 점수는 먼저 세운 기록이 앞선다
+  function placeIfNow(best) {
+    if (!(best > 0)) return 0;
+    var place = 1 + (state.hall || []).filter(function (r) { return r && r.score >= best; }).length;
+    return place <= 5 ? place : 0;
+  }
+
   // 배너 아래 줄: 대기 / 측정 / 결과(내 순위)
   function bannerBottom(phase, g, res) {
     if (phase === 'measuring') {
       var p = player(P1_COLOR, g.p1.samples, g.samplesNeeded, g.p1.score);
-      return '<div class="bb"><div class="bb-progress">측정 ' + p.samples + ' / ' + g.samplesNeeded + ' · 최고 ' + p.best + '</div>' +
+      var place = placeIfNow(p.best);
+      return '<div class="bb"><div class="bb-progress">측정 ' + p.samples + ' / ' + g.samplesNeeded + (place ? ' · <span class="bb-live-place">지금 기록이면 ' + place + '위</span>' : '') + '</div>' +
         '<div class="bb-bar"><div style="' + p.bar + '"></div></div></div>';
     }
     if (phase === 'result') {
@@ -183,6 +191,9 @@
       result: who(state.result && state.result.name) + (res.rank ? '최종 기록 · 명예의 전당 ' + res.rank + '위!' : '최종 기록'),
     };
     if (!$('banner-label')) buildMain();
+    // 카운트다운·측정 중에는 게이지와 명예의 전당을 숨기고 점수만 화면 가득 보여 준다
+    $('main').classList.toggle('focus', phase === 'countdown' || phase === 'measuring');
+    $('main').classList.toggle('counting', phase === 'countdown');
     setHtml($('banner-label'), labels[phase]);
     setHtml($('banner-bottom'), bannerBottom(phase, g, res));
     setHtml($('hall-rows'), hallRows(state.hall));
@@ -201,6 +212,7 @@
 
     var gauge = function (id) { return '<div id="' + id + '" class="gauge">' + gaugeCells() + '</div>'; };
     $('main').innerHTML =
+      '<canvas id="flow" class="flow"></canvas>' +
       '<div class="main-row">' +
       gauge('gauge-l') +
       '<div class="main-center">' + banner + hall + '</div>' +
@@ -249,6 +261,7 @@
       // 측정 중 숫자가 오르는 속도만큼 화면이 떨린다
       if (state.game.phase === 'measuring' && shown.p1 > before) bump(Math.min(7, (shown.p1 - before) / dt * 1.2));
       applyShake(t, dt);
+      scrollBackground(dt);
       drawCountdown(t);
       // 현재 힘 소리는 화면 숫자와 같은 부드러운 값을 따라간다 (점수 상한 = 1)
       if (state.game.phase === 'measuring') {
@@ -277,6 +290,61 @@
     }
     shakeOn = true;
     el.style.transform = 'translate(' + ((Math.random() * 2 - 1) * shake).toFixed(1) + 'px,' + ((Math.random() * 2 - 1) * shake).toFixed(1) + 'px)';
+  }
+
+  // ───────────────────────── 배경 흐름 ─────────────────────────
+  // 집중 화면(#main.focus)의 배경: 게이지 무지개색 픽셀 격자. 칸은 위로 흐르고, 아래부터 현재 힘만큼 밝게 차오른다.
+  // 색은 화면 높이(아래 파랑 → 위 노랑)로, 반짝임 무늬는 칸마다 붙어 함께 올라간다.
+  var CELL = 18, GAP = 3; // 디자인 px
+  var SCROLL_BASE = 40, SCROLL_MAX = 700; // 디자인 px/초
+  var RGB = RAINBOW.map(function (c) { return [1, 3, 5].map(function (i) { return parseInt(c.substr(i, 2), 16); }); });
+  var scrollPx = 0, flowT = 0;
+
+  function hash(x, y) {
+    var h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return h - Math.floor(h);
+  }
+
+  function rainbowAt(t) { // t: 0(아래) ~ 1(위)
+    var f = Math.max(0, Math.min(1, t)) * (RGB.length - 1), i = Math.min(RGB.length - 2, Math.floor(f)), k = f - i;
+    return [0, 1, 2].map(function (j) { return Math.round(RGB[i][j] + (RGB[i + 1][j] - RGB[i][j]) * k); });
+  }
+
+  function scrollBackground(dt) {
+    var g = state.game;
+    if (g.phase !== 'countdown' && g.phase !== 'measuring') return;
+    var cv = $('flow');
+    if (!cv) return;
+    var W = cv.clientWidth, H = cv.clientHeight;
+    if (!W || !H) return;
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    var fill = g.phase === 'measuring' ? Math.min(1, shown.p1 / MAX_SCORE) : 0;
+    scrollPx += (SCROLL_BASE + SCROLL_MAX * fill) * dt / 1000;
+    flowT += dt / 1000;
+
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = '#140A09';
+    ctx.fillRect(0, 0, W, H);
+    var cols = Math.ceil(W / CELL) + 1, rows = Math.ceil(H / CELL) + 2;
+    var base = Math.floor(scrollPx / CELL), frac = scrollPx - base * CELL;
+    var x0 = (W - cols * CELL) / 2;
+    var edge = fill * H;
+    for (var r = -1; r < rows; r++) { // -1: 새 줄이 화면 아래 밖에서 들어오게 (0부터면 맨 아래 줄이 갑자기 나타나 깜빡인다)
+      var id = r - base;                 // 칸 무늬의 고유 줄 번호 (흐름과 함께 위로)
+      var yb = r * CELL + frac;          // 아래에서 칸 아래쪽까지
+      var y = H - yb - CELL;
+      var rgb = rainbowAt((yb + CELL / 2) / H);
+      for (var c = 0; c < cols; c++) {
+        var n = hash(c, id);
+        var jag = (Math.sin(c * 0.55 + flowT * 3.1) + Math.sin(c * 1.37 - flowT * 2.3)) * CELL * 0.6 * Math.min(1, fill * 8);
+        var d = edge + jag - (yb + CELL / 2); // 차오른 경계까지 거리 (양수 = 안쪽)
+        var a, k = 1, w = 0;
+        if (d > 0) { a = 1; k = 0.72 + 0.28 * n; if (d < CELL * 1.5) w = 0.5; } // 차오른 칸은 불투명, 밝기만 칸마다 조금씩 다르다. 경계 칸은 흰빛
+        else a = 0.05 + 0.07 * n + (n > 0.985 ? 0.35 * (0.5 + 0.5 * Math.sin(flowT * 6 + c)) : 0);
+        ctx.fillStyle = 'rgba(' + [0, 1, 2].map(function (j) { return Math.round(rgb[j] * k + (255 - rgb[j] * k) * w); }).join(',') + ',' + Math.min(1, a).toFixed(3) + ')';
+        ctx.fillRect(Math.round(x0 + c * CELL), Math.round(y), CELL - GAP, CELL - GAP);
+      }
+    }
   }
 
   // ───────────────────────── 3·2·1 카운트다운 ─────────────────────────
@@ -1379,27 +1447,17 @@
 
   function renderNameModal() {
     var want = nameModalWanted();
-    if (want === nameShown) {
-      if (want) $('name-hint').textContent = nameHint();
-      return;
-    }
+    if (want === nameShown) return;
     nameShown = want;
     $('name-modal').hidden = !want;
     if (want) {
       releaseSimKeys();
       Sound.play('name');
-      $('name-hint').textContent = nameHint();
       $('name-input').value = (state.name && state.name.next) || '';
       setTimeout(function () { $('name-input').focus(); }, 0);
     } else if (document.activeElement === $('name-input')) {
       $('name-input').blur();
     }
-  }
-
-  function nameHint() {
-    return state.name && state.name.prompt
-      ? 'Enter: 바로 시작 · 비우고 Enter: 이름 없이 시작 · Esc: 취소'
-      : 'Enter: 저장 (START 를 누르면 시작) · Esc: 닫기';
   }
 
   function openNameModal() {
